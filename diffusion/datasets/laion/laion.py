@@ -12,13 +12,12 @@ from PIL import Image
 from streaming import Stream, StreamingDataset
 from torch.utils.data import DataLoader
 from torchvision import transforms
-from transformers import CLIPTokenizer
+from transformers import CLIPTokenizer, T5Tokenizer
 
 from diffusion.datasets.laion.transforms import LargestCenterSquare
 
 # Disable PIL max image size limit
 Image.MAX_IMAGE_PIXELS = None
-
 
 class StreamingLAIONDataset(StreamingDataset):
     """Implementation of the LAION dataset as a streaming dataset.
@@ -30,6 +29,7 @@ class StreamingLAIONDataset(StreamingDataset):
         local (str, optional): Local filesystem directory where dataset is cached during operation. Default: ``None``.
         split (str, optional): The dataset split to use. Currently, only ``None`` is supported. Default: ``None``.
         shuffle (bool): Whether to shuffle the samples in this dataset. Default: ``False``.
+        tokenizer_type (str): 'clip' or 't5'. Default: ``'clip'``.
         tokenizer_name_or_path (str): The name or path of the tokenizer to use. Default: ``'stabilityai/stable-diffusion-2-base'``.
         transform (Optional[Callable]): The transforms to apply to the image. Default: ``None``.
         predownload (Optional[int]): The number of samples to prefetch. Default: ``100_000``.
@@ -47,7 +47,9 @@ class StreamingLAIONDataset(StreamingDataset):
         local: Optional[str] = None,
         split: Optional[str] = None,
         shuffle: bool = False,
+        tokenizer: str = 'clip',
         tokenizer_name_or_path: str = 'stabilityai/stable-diffusion-2-base',
+        return_attention_mask: bool = False,
         caption_drop_prob: float = 0.0,
         transform: Optional[Callable] = None,
         predownload: int = 100_000,
@@ -72,9 +74,12 @@ class StreamingLAIONDataset(StreamingDataset):
             batch_size=batch_size,
             num_canonical_nodes=num_canonical_nodes,
         )
-
+        self.return_attention_mask = return_attention_mask
         self.transform = transform
-        self.tokenizer = CLIPTokenizer.from_pretrained(tokenizer_name_or_path, subfolder='tokenizer')
+        if tokenizer == 't5':
+            self.tokenizer = T5Tokenizer.from_pretrained(tokenizer_name_or_path)
+        else:
+            self.tokenizer = CLIPTokenizer.from_pretrained(tokenizer_name_or_path, subfolder='tokenizer')
         self.caption_drop_prob = caption_drop_prob
         self.image_size = image_size
 
@@ -92,14 +97,17 @@ class StreamingLAIONDataset(StreamingDataset):
             caption = ''
         else:
             caption = sample['caption']
-        tokenized_caption = self.tokenizer(
+        tokenized = self.tokenizer(
             caption,
             padding='max_length',
             max_length=self.tokenizer.model_max_length,
             truncation=True,
-        )['input_ids']
-        tokenized_caption = torch.tensor(tokenized_caption)
+            return_attention_mask=self.return_attention_mask,
+            return_tensors='pt')
+        tokenized_caption = tokenized.input_ids
         out = {'image': img, 'captions': tokenized_caption}
+        if self.return_attention_mask:
+            out['attention_mask'] = tokenized.attention_mask
         if 'caption_latents' in sample:
             out['caption_latents'] = torch.from_numpy(
                 np.frombuffer(sample['caption_latents'], dtype=np.float16).copy()).reshape(77, 1024)
@@ -116,7 +124,9 @@ def build_streaming_laion_dataloader(
     remote: Union[str, List],
     local: Union[str, List],
     batch_size: int,
+    tokenizer: str = 'clip',
     tokenizer_name_or_path: str = 'stabilityai/stable-diffusion-2-base',
+    return_attention_mask: bool = False,
     caption_drop_prob: float = 0.0,
     resize_size: int = 256,
     num_samples: Optional[int] = None,
@@ -169,7 +179,9 @@ def build_streaming_laion_dataloader(
         streams=streams,
         split=None,
         shuffle=shuffle,
+        tokenizer=tokenizer,
         tokenizer_name_or_path=tokenizer_name_or_path,
+        return_attention_mask=return_attention_mask,
         caption_drop_prob=caption_drop_prob,
         transform=transform,
         predownload=predownload,

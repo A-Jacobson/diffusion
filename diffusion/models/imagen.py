@@ -173,6 +173,9 @@ class Imagen(ComposerModel):
             raise ValueError(
                 f'prediction type must be one of sample, epsilon, or v_prediction. Got {self.prediction_type}')
         
+        lowres_conditional_images = None
+        lowres_aug_timesteps = None
+        
         # Forward through the model
         if self.is_superres:
             # resize inputs for superres 64 -> 256 for stage 2, 256 -> 1024 for stage 3
@@ -184,15 +187,13 @@ class Imagen(ComposerModel):
                                               int(len(self.scheduler) * self.noise_augmentation_level), 
                                              device=inputs.device, dtype=torch.long)
             lowres_noise = torch.randn_like(lowres_conditional_images) 
-            self.scheduler.add_noise(lowres_conditional_images, lowres_noise, lowres_aug_timesteps)
+            lowres_conditional_images = self.scheduler.add_noise(lowres_conditional_images, lowres_noise, lowres_aug_timesteps)
 
             # pass through superres unet
-            return self.model(x=noised_inputs, time=timesteps, text_embeds=conditioning,
-                             lowres_cond_img=lowres_conditional_images, lowres_aug_time=lowres_aug_timesteps), targets, timesteps
+        
+        return self.model(x=noised_inputs, time=timesteps, text_embeds=conditioning,
+                            lowres_cond_img=lowres_conditional_images, lowres_aug_time=lowres_aug_timesteps), targets, timesteps
 
-        else:
-            return self.model(x=noised_inputs, time=timesteps, text_embeds=conditioning), targets, timesteps
-        # resize inputs for superres + add noise augmentation here
 
     def loss(self, outputs, batch):
         return torch.nn.functional.mse_loss(outputs[0], outputs[1])
@@ -240,6 +241,7 @@ class Imagen(ComposerModel):
         tokenized_prompts: Optional[torch.LongTensor] = None,
         tokenized_negative_prompts: Optional[torch.LongTensor] = None,
         prompt_embeds: Optional[torch.FloatTensor] = None,
+        lowres_conditional_images: Optional[torch.FloatTensor] = None,
         negative_prompt_embeds: Optional[torch.FloatTensor] = None,
         height: int = 64,
         width: int = 64,
@@ -316,16 +318,35 @@ class Imagen(ComposerModel):
         # scale the initial noise by the standard deviation required by the scheduler
         images = images * self.inference_scheduler.init_noise_sigma
 
+        
+        lowres_aug_timesteps = None
+        
+        # Forward through the model
+        if self.is_superres:
+            # resize lowres image to same 
+            lowres_conditional_images = resize_image_to(lowres_conditional_images, images.shape[-1], pad_mode='reflect')
+
+            # add noise augmentation here, we add noise at a fixed timestep in the scheduler. 
+            # for a scheduler with 1k steps and a noise level of 0.2 we would set the timestep to 200.
+            lowres_aug_timesteps = torch.full((batch_size,), 
+                                              int(len(self.scheduler) * self.noise_augmentation_level), 
+                                             device=images.device, dtype=torch.long)
+            lowres_noise = torch.randn_like(lowres_conditional_images)
+            lowres_conditional_images = self.scheduler.add_noise(lowres_conditional_images, lowres_noise, lowres_aug_timesteps)
+
         # backward diffusion process
         for t in tqdm(self.inference_scheduler.timesteps, disable=not progress_bar):
             if do_classifier_free_guidance:
                 model_input = torch.cat([images] * 2)
+                lowres_conditional_images = torch.cat([images] * 2)
+
             else:
                 model_input = images
 
             model_input = self.inference_scheduler.scale_model_input(model_input, t)
             # get model's predicted output
-            model_output = self.model(model_input, t, encoder_hidden_states=text_embeddings).sample
+            model_output = self.model(x=model_input, time=t, text_embeds=text_embeddings,
+                            lowres_cond_img=lowres_conditional_images, lowres_aug_time=lowres_aug_timesteps)
 
             if do_classifier_free_guidance:
                 # perform guidance. Note this is only techincally correct for prediction_type 'epsilon'

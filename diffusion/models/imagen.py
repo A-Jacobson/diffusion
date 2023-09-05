@@ -144,7 +144,6 @@ class Imagen(ComposerModel):
 
     def forward(self, batch, generator=None):
         inputs, conditioning = batch[self.input_key], batch[self.conditioning_key]
-        print(batch.keys())
         batch_size = inputs.shape[0]
         # Encode the conditioning
         conditioning = self.text_encoder(input_ids=conditioning)[0]
@@ -418,3 +417,8 @@ def resize_image_to(image: torch.tensor,
     return out
 
 
+def imagen_generate(stages, prompt):
+    output = None
+    for model in stages:
+        output = model.generate(prompt, lowres_conditioning=output)
+    return output

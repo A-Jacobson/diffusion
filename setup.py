@@ -19,6 +19,8 @@ install_requires = [
     'clean-fid',
     'clip@git+https://github.com/openai/CLIP.git'
 ]
+extras_require = {}
+
 
 extras_require['imagen'] = {
     'resize_right==0.0.2',

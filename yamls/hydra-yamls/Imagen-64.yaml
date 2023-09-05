@@ -1,0 +1,93 @@
+project: # Insert wandb project name
+batch_size: 2 # 2048
+seed: 17
+scale_schedule_ratio: 1.0
+name: imagen-64
+eval_first: false
+# algorithms:
+  # low_precision_groupnorm:
+  #   attribute: unet
+  #   precision: amp_fp16
+  # low_precision_layernorm:
+  #   attribute: unet
+  #   precision: amp_fp16
+model:
+  _target_: diffusion.models.imagen.build_imagen
+  t5_name: google/t5-v1_1-base # upgrade to larger t5 for main run
+  stage: 1 # sets proper unet for each stage + training config (SR vs non-superres)
+  prediction_type: epsilon
+
+
+dataset:
+  train_batch_size: ${batch_size}
+  eval_batch_size: 16 # Should be 8 per device
+  train_dataset:
+    _target_: diffusion.datasets.laion.laion.build_streaming_laion_dataloader
+    remote:
+      - oci://mosaicml-internal-dataset-laion2b-en/4.5v2/64-128/1
+    local:
+      - data/tmp/mds-cache/mds-laion2b-en/4.5v2/64-128/1
+    batch_size: ${batch_size}
+    tokenizer: t5
+    tokenizer_name_or_path: google/t5-v1_1-base
+    return_attention_mask: false  # to pass to cross attention
+    caption_drop_prob: 0.1 # lets non-conditional guidance work
+    resize_size: 64
+    drop_last: true
+    shuffle: true
+    prefetch_factor: 2
+    num_workers: 8
+    persistent_workers: true
+    pin_memory: true
+    download_timeout: 300
+    # num_canonical_nodes: 64
+  eval_dataset:
+    _target_: diffusion.datasets.coco.coco_captions.build_streaming_cocoval_dataloader
+    remote: oci://mosaicml-internal-dataset-coco/2014/val/10k-1/
+    local: /tmp/mds-cache/mds-coco-10k-1/
+    batch_size: ${batch_size}
+    resize_size: 64
+    prefetch_factor: 2
+    num_workers: 8
+    persistent_workers: True
+    pin_memory: True
+optimizer:
+  _target_: torch.optim.AdamW
+  lr: 1.0e-4
+scheduler:
+  _target_: composer.optim.CosineAnnealingWithWarmupScheduler
+  t_warmup: 10_000ba
+  t_max: 550_000ba
+logger:
+  wandb:
+    _target_: composer.loggers.wandb_logger.WandBLogger
+    name: ${name}
+    project: ${project}
+    group: ${name}
+callbacks:
+  speed_monitor:
+    _target_: composer.callbacks.speed_monitor.SpeedMonitor
+    window_size: 10
+  lr_monitor:
+    _target_: composer.callbacks.lr_monitor.LRMonitor
+  memory_monitor:
+    _target_: composer.callbacks.memory_monitor.MemoryMonitor
+  runtime_estimator:
+    _target_: composer.callbacks.runtime_estimator.RuntimeEstimator
+  optimizer_monitor:
+    _target_: composer.callbacks.OptimizerMonitor
+trainer:
+  _target_: composer.Trainer
+  device: gpu
+  max_duration: 550_000ba
+  eval_interval: 10_000ba
+  device_train_microbatch_size: 2
+  run_name: ${name}
+  seed: ${seed}
+  scale_schedule_ratio: ${scale_schedule_ratio}
+  save_folder:  oci://mosaicml-internal-checkpoints/austin/imagen-base-laion-0/
+  save_interval: 10_000ba
+  save_overwrite: true
+  autoresume: false
+  # fsdp_config:
+  #   sharding_strategy: "SHARD_GRAD_OP"

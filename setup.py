@@ -6,7 +6,7 @@
 from setuptools import find_packages, setup
 
 install_requires = [
-    'mosaicml@git+https://github.com/mosaicml/composer.git@6cf3d3a1aa300834c650f89460b5ac9bbc5a1e46',
+    'composer>=0.16.0',
     'mosaicml-streaming>=0.4.0,<1.0',
     'hydra-core>=1.2',
     'hydra-colorlog>=1.1.0',
@@ -17,10 +17,14 @@ install_requires = [
     'triton==2.0.0',
     'torchmetrics[image]==0.11.3',
     'clean-fid',
-    'clip@git+https://github.com/openai/CLIP.git',
+    'clip@git+https://github.com/openai/CLIP.git'
 ]
 
-extras_require = {}
+extras_require['imagen'] = {
+    'resize_right==0.0.2',
+    'imagen_pytorch==1.25.6',
+    'einops_exts==0.0.4'
+}
 
 extras_require['dev'] = {
     'pre-commit>=2.18.1,<3',

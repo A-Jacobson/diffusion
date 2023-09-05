@@ -4,7 +4,6 @@
 """Diffusion models in pixel space."""
 
 from typing import Literal, List, Optional
-import copy
 
 import torch
 from composer.devices import DeviceGPU
@@ -18,7 +17,7 @@ from transformers import T5Tokenizer, T5EncoderModel
 from resize_right import resize
 
 
-def imagen(t5_name: str = 'google/t5-v1_1-base', unet='base', prediction_type='epsilon', stage=1):
+def build_imagen(t5_name: str = 'google/t5-v1_1-base', prediction_type='epsilon', stage=1):
     """Discrete pixel diffusion training setup.
 
     Args:
@@ -32,13 +31,12 @@ def imagen(t5_name: str = 'google/t5-v1_1-base', unet='base', prediction_type='e
     # Get the T5 text encoder and tokenizer:
     text_encoder = T5EncoderModel.from_pretrained(t5_name)
     tokenizer = T5Tokenizer.from_pretrained(t5_name)
-    embed_dim = text_encoder.config.d_model # pull embedding dim from hf config
-    lowres_noise_scheduler = None
+    text_embed_dim = text_encoder.config.d_model # pull embedding dim from hf config
 
 
-    unets =  {1: BaseUnet64(embed_dim=embed_dim), 
-              2: SRUnet256(embed_dim=embed_dim, lowres_cond=True),
-              3: SRUnet1024(embed_dim=embed_dim, lowres_cond=True)}
+    unets =  {1: BaseUnet64(text_embed_dim=text_embed_dim, lowres_cond=False), 
+              2: SRUnet256(text_embed_dim=text_embed_dim, lowres_cond=True),
+              3: SRUnet1024(text_embed_dim=text_embed_dim, lowres_cond=True)}
     
     noise_schedulers = {1: DDPMScheduler(num_train_timesteps=1000,
                                     beta_schedule='squaredcos_cap_v2',
@@ -64,10 +62,8 @@ def imagen(t5_name: str = 'google/t5-v1_1-base', unet='base', prediction_type='e
                                         prediction_type=prediction_type,
                                         thresholding=True)
     
-    if stage > 1: 
-        is_superres = True
-        # create noise scheduler for noise augmentation
-
+    
+    is_superres = True if stage > 1 else False
         
     # Create the pixel space diffusion model
     model = Imagen(unet,
@@ -150,7 +146,7 @@ class Imagen(ComposerModel):
         inputs, conditioning = batch[self.input_key], batch[self.conditioning_key]
         batch_size = inputs.shape[0]
         # Encode the conditioning
-        conditioning = self.text_encoder(conditioning)[0]
+        conditioning = self.text_encoder(input_ids=conditioning)[0]
         # Sample the diffusion timesteps, either discrete or continuous
         if self.continuous_time:
             timesteps = self.scheduler.t_max * torch.rand(batch_size, device=inputs.device, generator=generator)
@@ -190,9 +186,9 @@ class Imagen(ComposerModel):
             lowres_conditional_images = self.scheduler.add_noise(lowres_conditional_images, lowres_noise, lowres_aug_timesteps)
 
             # pass through superres unet
-        
-        return self.model(x=noised_inputs, time=timesteps, text_embeds=conditioning,
+            return self.model(x=noised_inputs, time=timesteps, text_embeds=conditioning,
                             lowres_cond_img=lowres_conditional_images, lowres_aug_time=lowres_aug_timesteps), targets, timesteps
+        return self.model(x=noised_inputs, time=timesteps, text_embeds=conditioning), targets, timesteps
 
 
     def loss(self, outputs, batch):
@@ -293,7 +289,7 @@ class Imagen(ComposerModel):
                 Default: `None`.
         """
         # Create rng for the generation
-        device = self.model.device
+        device = next(self.model.parameters()).device
         rng_generator = torch.Generator(device=device)
         if seed:
             rng_generator = rng_generator.manual_seed(seed)  # type: ignore
@@ -338,15 +334,18 @@ class Imagen(ComposerModel):
         for t in tqdm(self.inference_scheduler.timesteps, disable=not progress_bar):
             if do_classifier_free_guidance:
                 model_input = torch.cat([images] * 2)
-                lowres_conditional_images = torch.cat([images] * 2)
-
+                if self.is_superres:
+                    lowres_conditional_images = torch.cat([images] * 2)
             else:
                 model_input = images
 
             model_input = self.inference_scheduler.scale_model_input(model_input, t)
             # get model's predicted output
-            model_output = self.model(x=model_input, time=t, text_embeds=text_embeddings,
-                            lowres_cond_img=lowres_conditional_images, lowres_aug_time=lowres_aug_timesteps)
+            if self.is_superres:
+                model_output = self.model(x=model_input, time=t, text_embeds=text_embeddings,
+                                lowres_cond_img=lowres_conditional_images, lowres_aug_time=lowres_aug_timesteps)
+            else:
+                model_output = self.model(x=model_input, time=t, text_embeds=text_embeddings)
 
             if do_classifier_free_guidance:
                 # perform guidance. Note this is only techincally correct for prediction_type 'epsilon'

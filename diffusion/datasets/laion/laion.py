@@ -104,7 +104,7 @@ class StreamingLAIONDataset(StreamingDataset):
             truncation=True,
             return_attention_mask=self.return_attention_mask,
             return_tensors='pt')
-        tokenized_caption = tokenized.input_ids
+        tokenized_caption = tokenized.input_ids[0]
         out = {'image': img, 'captions': tokenized_caption}
         if self.return_attention_mask:
             out['attention_mask'] = tokenized.attention_mask

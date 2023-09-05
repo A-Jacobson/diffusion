@@ -1,22 +1,14 @@
-project: # Insert wandb project name
+project: imagen
 batch_size: 2 # 2048
 seed: 17
 scale_schedule_ratio: 1.0
-name: imagen-base
+name: imagen-256
 eval_first: false
-# algorithms:
-  # low_precision_groupnorm:
-  #   attribute: unet
-  #   precision: amp_fp16
-  # low_precision_layernorm:
-  #   attribute: unet
-  #   precision: amp_fp16
 model:
   _target_: diffusion.models.imagen.build_imagen
   t5_name: google/t5-v1_1-base
-  unet: base
+  stage: 2 
   prediction_type: epsilon
-  stage: 1
 
 dataset:
   train_batch_size: ${batch_size}
@@ -32,7 +24,7 @@ dataset:
     tokenizer_name_or_path: google/t5-v1_1-base
     return_attention_mask: false  # to pass to cross attention
     caption_drop_prob: 0.1 # lets non-conditional guidance work
-    resize_size: 64
+    resize_size: 256
     drop_last: true
     shuffle: true
     prefetch_factor: 2
@@ -46,7 +38,7 @@ dataset:
     remote: oci://mosaicml-internal-dataset-coco/2014/val/10k-1/
     local: /tmp/mds-cache/mds-coco-10k-1/
     batch_size: 16
-    resize_size: 64
+    resize_size: 256
     prefetch_factor: 2
     num_workers: 8
     persistent_workers: True
@@ -76,6 +68,13 @@ callbacks:
     _target_: composer.callbacks.runtime_estimator.RuntimeEstimator
   optimizer_monitor:
     _target_: composer.callbacks.OptimizerMonitor
+  image_monitor:
+    _target_: diffusion.callbacks.log_diffusion_images.LogDiffusionImages
+    prompts: # add any prompts you would like to visualize
+    - A dog wearing a spacesuit
+    - An astronaut riding a horse
+    size: 256 # generated image resolution
+    guidance_scale: 3
 trainer:
   _target_: composer.Trainer
   device: gpu

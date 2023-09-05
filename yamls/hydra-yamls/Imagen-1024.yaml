@@ -1,22 +1,14 @@
-project: # Insert wandb project name
-batch_size: 2 # 2048
+project: imagen
+batch_size: 2 # 2048 for full run
 seed: 17
 scale_schedule_ratio: 1.0
-name: imagen-base
+name: imagen-1024
 eval_first: false
-# algorithms:
-  # low_precision_groupnorm:
-  #   attribute: unet
-  #   precision: amp_fp16
-  # low_precision_layernorm:
-  #   attribute: unet
-  #   precision: amp_fp16
 model:
   _target_: diffusion.models.imagen.build_imagen
   t5_name: google/t5-v1_1-base
-  unet: base
+  stage: 3
   prediction_type: epsilon
-  stage: 1
 
 dataset:
   train_batch_size: ${batch_size}
@@ -32,7 +24,8 @@ dataset:
     tokenizer_name_or_path: google/t5-v1_1-base
     return_attention_mask: false  # to pass to cross attention
     caption_drop_prob: 0.1 # lets non-conditional guidance work
-    resize_size: 64
+    resize_size: 1024
+    lowres_image_size: 256
     drop_last: true
     shuffle: true
     prefetch_factor: 2
@@ -45,8 +38,8 @@ dataset:
     _target_: diffusion.datasets.coco.coco_captions.build_streaming_cocoval_dataloader
     remote: oci://mosaicml-internal-dataset-coco/2014/val/10k-1/
     local: /tmp/mds-cache/mds-coco-10k-1/
-    batch_size: 16
-    resize_size: 64
+    batch_size: 2
+    resize_size: 1024
     prefetch_factor: 2
     num_workers: 8
     persistent_workers: True

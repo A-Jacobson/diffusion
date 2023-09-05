@@ -9,7 +9,7 @@ from typing import Optional
 from streaming.base import StreamingDataset
 from torch.utils.data import DataLoader
 from torchvision import transforms
-from transformers import CLIPTokenizer
+from transformers import CLIPTokenizer, T5Tokenizer
 
 from diffusion.datasets.laion.transforms import LargestCenterSquare
 
@@ -51,7 +51,9 @@ class StreamingCOCOCaption(StreamingDataset):
         local,
         shuffle,
         batch_size,
+        tokenizer='clip',
         tokenizer_name_or_path='stabilityai/stable-diffusion-2-base',
+        return_attention_mask: bool = False,
         caption_selection='first',
         download_timeout=120,
         transform=None,
@@ -65,7 +67,11 @@ class StreamingCOCOCaption(StreamingDataset):
             download_timeout=download_timeout,
             num_canonical_nodes=num_canonical_nodes,
         )
-        self.tokenizer = CLIPTokenizer.from_pretrained(tokenizer_name_or_path, subfolder='tokenizer')
+        self.return_attention_mask = return_attention_mask
+        if tokenizer == 't5':
+            self.tokenizer = T5Tokenizer.from_pretrained(tokenizer_name_or_path)
+        else:
+            self.tokenizer = CLIPTokenizer.from_pretrained(tokenizer_name_or_path, subfolder='tokenizer')
         self.transform = transform
         self.caption_selection = caption_selection.lower()
         if caption_selection not in ['random', 'first']:
@@ -86,14 +92,24 @@ class StreamingCOCOCaption(StreamingDataset):
             captions = random.sample(sample['captions'], k=1)[0]
         else:
             raise ValueError(f'Invalid caption selection: {self.caption_selection}. Must be one of [random, first].')
-        captions = self.tokenizer(captions, padding='max_length', truncation=True, return_tensors='pt')['input_ids'][0]
+
+        captions = self.tokenizer(
+            captions,
+            padding='max_length',
+            max_length=self.tokenizer.model_max_length,
+            truncation=True,
+            return_attention_mask=self.return_attention_mask,
+            return_tensors='pt')['input_ids'][0]
         return {'image': image, 'captions': captions}
 
 
 def build_streaming_cocoval_dataloader(
-    batch_size: int,
     remote: str,
-    local: str = '/tmp/mds-cache/mds-coco-val/',
+    local: str,
+    batch_size: int,
+    tokenizer: str = 'clip',
+    tokenizer_name_or_path: str = 'stabilityai/stable-diffusion-2-base',
+    return_attention_mask: bool = False,
     shuffle: bool = False,
     resize_size: int = 512,
     use_crop: bool = False,
@@ -112,6 +128,9 @@ def build_streaming_cocoval_dataloader(
         local=local,
         shuffle=shuffle,
         batch_size=batch_size,
+        tokenizer=tokenizer,
+        tokenizer_name_or_path=tokenizer_name_or_path,
+        return_attention_mask=return_attention_mask,
         caption_selection=caption_selection,
         transform=transform,
         num_canonical_nodes=num_canonical_nodes,

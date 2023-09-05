@@ -15,6 +15,7 @@ from torchvision import transforms
 from transformers import CLIPTokenizer, T5Tokenizer
 
 from diffusion.datasets.laion.transforms import LargestCenterSquare
+from diffusion.models.imagen import resize_image_to
 
 # Disable PIL max image size limit
 Image.MAX_IMAGE_PIXELS = None
@@ -57,6 +58,7 @@ class StreamingLAIONDataset(StreamingDataset):
         download_timeout: float = 120,
         batch_size: Optional[int] = None,
         image_size: Optional[int] = None,
+        lowres_image_size: Optional[int] = None,
         num_canonical_nodes: Optional[int] = None,
     ) -> None:
 
@@ -82,6 +84,7 @@ class StreamingLAIONDataset(StreamingDataset):
             self.tokenizer = CLIPTokenizer.from_pretrained(tokenizer_name_or_path, subfolder='tokenizer')
         self.caption_drop_prob = caption_drop_prob
         self.image_size = image_size
+        self.lowres_image_size = lowres_image_size
 
     def __getitem__(self, index):
         sample = super().__getitem__(index)
@@ -108,6 +111,8 @@ class StreamingLAIONDataset(StreamingDataset):
         out = {'image': img, 'captions': tokenized_caption}
         if self.return_attention_mask:
             out['attention_mask'] = tokenized.attention_mask
+        if self.lowres_image_size:
+            out['lowres_image'] = resize_image_to(img, self.lowres_image_size, pad_mode='reflect')
         if 'caption_latents' in sample:
             out['caption_latents'] = torch.from_numpy(
                 np.frombuffer(sample['caption_latents'], dtype=np.float16).copy()).reshape(77, 1024)
@@ -127,6 +132,7 @@ def build_streaming_laion_dataloader(
     tokenizer: str = 'clip',
     tokenizer_name_or_path: str = 'stabilityai/stable-diffusion-2-base',
     return_attention_mask: bool = False,
+    lowres_image_size: Optional[int] = None,
     caption_drop_prob: float = 0.0,
     resize_size: int = 256,
     num_samples: Optional[int] = None,
@@ -182,6 +188,7 @@ def build_streaming_laion_dataloader(
         tokenizer=tokenizer,
         tokenizer_name_or_path=tokenizer_name_or_path,
         return_attention_mask=return_attention_mask,
+        lowres_image_size=lowres_image_size,
         caption_drop_prob=caption_drop_prob,
         transform=transform,
         predownload=predownload,

@@ -1,4 +1,4 @@
-project: # Insert wandb project name
+project: imagen
 batch_size: 2 # 2048
 seed: 17
 scale_schedule_ratio: 1.0
@@ -15,12 +15,12 @@ model:
   _target_: diffusion.models.imagen.build_imagen
   t5_name: google/t5-v1_1-base # upgrade to larger t5 for main run
   stage: 1 # sets proper unet for each stage + training config (SR vs non-superres)
-  prediction_type: epsilon
+  prediction_type: epsilon # noise, sample, or velocity
 
 
 dataset:
   train_batch_size: ${batch_size}
-  eval_batch_size: 16 # Should be 8 per device
+  eval_batch_size: 2 # Should be 8 per device
   train_dataset:
     _target_: diffusion.datasets.laion.laion.build_streaming_laion_dataloader
     remote:
@@ -44,7 +44,7 @@ dataset:
   eval_dataset:
     _target_: diffusion.datasets.coco.coco_captions.build_streaming_cocoval_dataloader
     remote: oci://mosaicml-internal-dataset-coco/2014/val/10k-1/
-    local: /tmp/mds-cache/mds-coco-10k-1/
+    local: data/tmp/mds-cache/mds-coco-10k-1/
     batch_size: ${batch_size}
     resize_size: 64
     prefetch_factor: 2
@@ -76,6 +76,13 @@ callbacks:
     _target_: composer.callbacks.runtime_estimator.RuntimeEstimator
   optimizer_monitor:
     _target_: composer.callbacks.OptimizerMonitor
+  # image_monitor:
+  #   _target_: diffusion.callbacks.log_diffusion_images.LogDiffusionImages
+  #   prompts: # add any prompts you would like to visualize
+  #   - A dog wearing a spacesuit
+  #   - An astronaut riding a horse
+  #   size: 64 # generated image resolution
+  #   guidance_scale: 3
 trainer:
   _target_: composer.Trainer
   device: gpu

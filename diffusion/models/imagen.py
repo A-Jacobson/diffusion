@@ -18,7 +18,7 @@ from resize_right import resize
 
 
 def build_imagen(t5_name: str = 'google/t5-v1_1-base', prediction_type='epsilon', stage=1):
-    """Discrete pixel diffusion training setup.
+    """Imagen pixel diffusion training setup.
 
     Args:
         t5_name (str, optional): Name of the t5 model to load. 
@@ -144,6 +144,7 @@ class Imagen(ComposerModel):
 
     def forward(self, batch, generator=None):
         inputs, conditioning = batch[self.input_key], batch[self.conditioning_key]
+        print(batch.keys)
         batch_size = inputs.shape[0]
         # Encode the conditioning
         conditioning = self.text_encoder(input_ids=conditioning)[0]
@@ -169,14 +170,12 @@ class Imagen(ComposerModel):
             raise ValueError(
                 f'prediction type must be one of sample, epsilon, or v_prediction. Got {self.prediction_type}')
         
-        lowres_conditional_images = None
-        lowres_aug_timesteps = None
-        
         # Forward through the model
         if self.is_superres:
-            # resize inputs for superres 64 -> 256 for stage 2, 256 -> 1024 for stage 3
-            lowres_conditional_images = resize_image_to(inputs, inputs.shape[-1]*4, pad_mode='reflect')
-
+            # lowres image is resized from input in dataloader, then resized back here. This simulates starting with a 
+            # low res image and resizing it to our target size for conditioning.
+            lowres_conditional_images = resize_image_to(batch['lowres_image'], inputs.shape[-1], pad_mode='reflect')
+            
             # add noise augmentation here, we add noise at a fixed timestep in the scheduler. 
             # for a scheduler with 1k steps and a noise level of 0.2 we would set the timestep to 200.
             lowres_aug_timesteps = torch.full((batch_size,), 
@@ -187,7 +186,7 @@ class Imagen(ComposerModel):
 
             # pass through superres unet
             return self.model(x=noised_inputs, time=timesteps, text_embeds=conditioning,
-                            lowres_cond_img=lowres_conditional_images, lowres_aug_time=lowres_aug_timesteps), targets, timesteps
+                            lowres_cond_img=lowres_conditional_images, lowres_noise_times=lowres_aug_timesteps), targets, timesteps
         return self.model(x=noised_inputs, time=timesteps, text_embeds=conditioning), targets, timesteps
 
 
@@ -195,10 +194,11 @@ class Imagen(ComposerModel):
         return torch.nn.functional.mse_loss(outputs[0], outputs[1])
 
     def eval_forward(self, batch, outputs=None):
+        device = next(self.model.parameters()).device
         if outputs is not None:
             return outputs
         # Create rng and fix the seed for eval
-        generator = torch.Generator(device=self.model.device)
+        generator = torch.Generator(device=device)
         generator = generator.manual_seed(self.val_seed)
         # Get model outputs
         model_out, targets, timesteps = self.forward(batch, generator=generator)
@@ -321,7 +321,6 @@ class Imagen(ComposerModel):
         if self.is_superres:
             # resize lowres image to same 
             lowres_conditional_images = resize_image_to(lowres_conditional_images, images.shape[-1], pad_mode='reflect')
-
             # add noise augmentation here, we add noise at a fixed timestep in the scheduler. 
             # for a scheduler with 1k steps and a noise level of 0.2 we would set the timestep to 200.
             lowres_aug_timesteps = torch.full((batch_size,), 
@@ -331,21 +330,24 @@ class Imagen(ComposerModel):
             lowres_conditional_images = self.scheduler.add_noise(lowres_conditional_images, lowres_noise, lowres_aug_timesteps)
 
         # backward diffusion process
-        for t in tqdm(self.inference_scheduler.timesteps, disable=not progress_bar):
+        timesteps = self.inference_scheduler.timesteps.to(device)
+        for t in tqdm(timesteps, disable=not progress_bar):
+            timestep = t.unsqueeze(0)
             if do_classifier_free_guidance:
+                timestep = torch.cat([timestep] * 2)
                 model_input = torch.cat([images] * 2)
                 if self.is_superres:
-                    lowres_conditional_images = torch.cat([images] * 2)
+                    lowres_conditional_images = torch.cat([lowres_conditional_images] * 2)
             else:
                 model_input = images
 
             model_input = self.inference_scheduler.scale_model_input(model_input, t)
             # get model's predicted output
             if self.is_superres:
-                model_output = self.model(x=model_input, time=t, text_embeds=text_embeddings,
-                                lowres_cond_img=lowres_conditional_images, lowres_aug_time=lowres_aug_timesteps)
+                model_output = self.model(x=model_input, time=timestep, text_embeds=text_embeddings,
+                                lowres_cond_img=lowres_conditional_images, lowres_noise_times=lowres_aug_timesteps)
             else:
-                model_output = self.model(x=model_input, time=t, text_embeds=text_embeddings)
+                model_output = self.model(x=model_input, time=timestep, text_embeds=text_embeddings)
 
             if do_classifier_free_guidance:
                 # perform guidance. Note this is only techincally correct for prediction_type 'epsilon'
@@ -414,3 +416,5 @@ def resize_image_to(image: torch.tensor,
         out = out.clamp(*clamp_range)
 
     return out
+
+

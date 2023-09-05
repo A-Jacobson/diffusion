@@ -8,6 +8,19 @@ import pytest
 import torch
 
 from diffusion.models.models import stable_diffusion_2
+from diffusion.models.imagen import build_imagen
+
+
+def test_imagen_base_forward():
+    model = build_imagen(t5_name='google/t5-v1_1-small', stage=1)
+    batch_size = 1
+    H = 8
+    W = 8
+    image = torch.randn(batch_size, 3, H, W)
+    caption = torch.randint(low=0, high=128, size=(
+        batch_size,
+        77,
+    ), dtype=torch.long)
 
 
 def test_model_forward():

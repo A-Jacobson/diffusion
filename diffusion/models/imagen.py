@@ -38,6 +38,14 @@ def build_imagen(t5_name: str = 'google/t5-v1_1-base', prediction_type='epsilon'
               2: SRUnet256(text_embed_dim=text_embed_dim, lowres_cond=True),
               3: SRUnet1024(text_embed_dim=text_embed_dim, lowres_cond=True)}
     
+    unets[1] = unets[1].cast_model_parameters(lowres_cond=False, text_embed_dim=text_embed_dim,
+                                    channels=3, channels_out=3, cond_on_text=True)
+    unets[2] = unets[2].cast_model_parameters(lowres_cond=True, text_embed_dim=text_embed_dim,
+                                    channels=3, channels_out=3, cond_on_text=True)
+    unets[3] = unets[3].cast_model_parameters(lowres_cond=True, text_embed_dim=text_embed_dim,
+                                    channels=3, channels_out=3, cond_on_text=True)
+
+    
     noise_schedulers = {1: DDPMScheduler(num_train_timesteps=1000,
                                     beta_schedule='squaredcos_cap_v2',
                                     prediction_type=prediction_type,

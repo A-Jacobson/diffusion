@@ -134,7 +134,6 @@ class StableDiffusion(ComposerModel):
                 self.val_metrics[metric.__class__.__name__] = metric
         # Add a mse metric for the full loss
         self.val_metrics['MeanSquaredError'] = MeanSquaredError()
-
         self.text_encoder = text_encoder
         self.tokenizer = tokenizer
         self.inference_scheduler = inference_noise_scheduler
@@ -276,8 +275,8 @@ class StableDiffusion(ComposerModel):
         tokenized_negative_prompts: Optional[torch.LongTensor] = None,
         prompt_embeds: Optional[torch.FloatTensor] = None,
         negative_prompt_embeds: Optional[torch.FloatTensor] = None,
-        height: Optional[int] = None,
-        width: Optional[int] = None,
+        height: Optional[int] = 256,
+        width: Optional[int] = 256,
         num_inference_steps: Optional[int] = 50,
         guidance_scale: Optional[float] = 3.0,
         num_images_per_prompt: Optional[int] = 1,
@@ -375,7 +374,7 @@ class StableDiffusion(ComposerModel):
 
             latent_model_input = self.inference_scheduler.scale_model_input(latent_model_input, t)
             # Model prediction
-            pred = self.unet(latent_model_input, t, encoder_hidden_states=text_embeddings).sample
+            pred = self.unet(latent_model_input, t, encoder_hidden_states=text_embeddings)['sample']
 
             if do_classifier_free_guidance:
                 # perform guidance. Note this is only techincally correct for prediction_type 'epsilon'

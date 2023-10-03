@@ -3,7 +3,7 @@ import torch.nn as nn
 import math
 import einops
 import torch.utils.checkpoint
-
+from diffusion.models.stable_diffusion import StableDiffusion
 
 if hasattr(torch.nn.functional, 'scaled_dot_product_attention'):
     ATTENTION_MODE = 'flash'
@@ -15,7 +15,6 @@ else:
     except:
         ATTENTION_MODE = 'math'
 print(f'attention mode is {ATTENTION_MODE}')
-
 
 
 class Mlp(nn.Module):
@@ -242,3 +241,9 @@ class UViT(nn.Module):
         x = unpatchify(x, self.in_chans)
         x = self.final_layer(x)
         return {'sample': x}
+    
+
+def uvit_huge(max_size=32, in_chans=4, embed_dim=768, patch_size=2):
+    return UViT(max_size=max_size, patch_size=patch_size, in_chans=in_chans, 
+                embed_dim=embed_dim, depth=20, num_heads=16, mlp_ratio=4, 
+                qkv_bias=False, mlp_time_embed=False)

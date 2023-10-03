@@ -16,6 +16,7 @@ from transformers import CLIPTextModel, CLIPTokenizer, PretrainedConfig
 from diffusion.models.pixel_diffusion import PixelDiffusion
 from diffusion.models.stable_diffusion import StableDiffusion
 from diffusion.schedulers.schedulers import ContinuousTimeScheduler
+from diffusion.models.uvit import uvit_huge
 
 try:
     import xformers  # type: ignore
@@ -28,6 +29,7 @@ except:
 def stable_diffusion_2(
     model_name: str = 'stabilityai/stable-diffusion-2-base',
     pretrained: bool = True,
+    use_uvit: bool = False,
     prediction_type: str = 'epsilon',
     train_metrics: Optional[List] = None,
     val_metrics: Optional[List] = None,
@@ -76,6 +78,8 @@ def stable_diffusion_2(
 
     if pretrained:
         unet = UNet2DConditionModel.from_pretrained(model_name, subfolder='unet')
+    elif use_uvit:
+        unet = uvit_huge() 
     else:
         config = PretrainedConfig.get_config_dict(model_name, subfolder='unet')
         unet = UNet2DConditionModel(**config[0])

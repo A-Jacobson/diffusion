@@ -336,8 +336,6 @@ class StableDiffusion(ComposerModel):
             rng_generator = rng_generator.manual_seed(seed)  # type: ignore
 
         vae_scale_factor = 8
-        height = height or self.unet.config.sample_size * vae_scale_factor
-        width = width or self.unet.config.sample_size * vae_scale_factor
         assert height is not None  # for type checking
         assert width is not None  # for type checking
 
@@ -356,7 +354,7 @@ class StableDiffusion(ComposerModel):
 
         # prepare for diffusion generation process
         latents = torch.randn(
-            (batch_size, self.unet.config.in_channels, height // vae_scale_factor, width // vae_scale_factor),
+            (batch_size, 4, height // vae_scale_factor, width // vae_scale_factor),
             device=device,
             generator=rng_generator,
         )
@@ -374,7 +372,7 @@ class StableDiffusion(ComposerModel):
 
             latent_model_input = self.inference_scheduler.scale_model_input(latent_model_input, t)
             # Model prediction
-            pred = self.unet(latent_model_input, t, encoder_hidden_states=text_embeddings)['sample']
+            pred = self.unet(latent_model_input, t.unsqueeze(0), text_embeddings)['sample']
 
             if do_classifier_free_guidance:
                 # perform guidance. Note this is only techincally correct for prediction_type 'epsilon'

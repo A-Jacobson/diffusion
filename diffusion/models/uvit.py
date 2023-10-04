@@ -3,7 +3,6 @@ import torch.nn as nn
 import math
 import einops
 import torch.utils.checkpoint
-from diffusion.models.stable_diffusion import StableDiffusion
 
 if hasattr(torch.nn.functional, 'scaled_dot_product_attention'):
     ATTENTION_MODE = 'flash'
@@ -222,7 +221,7 @@ class UViT(nn.Module):
         time_token = time_token.unsqueeze(dim=1)
         context_token = self.context_embed(context)
         x = torch.cat((time_token, context_token, x), dim=1)
-        x = x + self.pos_embed[:, x.shape[1]]
+        x = x + self.pos_embed[:, :x.shape[1]]
 
         skips = []
         for blk in self.in_blocks:

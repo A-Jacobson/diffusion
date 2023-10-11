@@ -30,6 +30,8 @@ def stable_diffusion_2(
     model_name: str = 'stabilityai/stable-diffusion-2-base',
     pretrained: bool = True,
     use_uvit: bool = False,
+    max_size: int = 128,
+    patch_size: int = 2,
     prediction_type: str = 'epsilon',
     train_metrics: Optional[List] = None,
     val_metrics: Optional[List] = None,
@@ -79,7 +81,7 @@ def stable_diffusion_2(
     if pretrained:
         unet = UNet2DConditionModel.from_pretrained(model_name, subfolder='unet')
     elif use_uvit:
-        unet = uvit_huge() 
+        unet = uvit_huge(max_size=max_size, patch_size=patch_size) 
     else:
         config = PretrainedConfig.get_config_dict(model_name, subfolder='unet')
         unet = UNet2DConditionModel(**config[0])

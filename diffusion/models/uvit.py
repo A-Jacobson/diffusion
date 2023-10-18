@@ -244,5 +244,5 @@ class UViT(nn.Module):
 
 def uvit_huge(max_size=128, in_chans=4, embed_dim=1024,  clip_dim=1024, patch_size=2):
     return UViT(max_size=max_size, patch_size=patch_size, in_chans=in_chans, 
-                embed_dim=embed_dim, clip_dim=clip_dim, depth=20, num_heads=16, 
+                embed_dim=embed_dim, clip_dim=clip_dim, depth=30, num_heads=24, 
                 mlp_ratio=4, qkv_bias=False, mlp_time_embed=False)

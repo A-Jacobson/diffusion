@@ -84,7 +84,8 @@ class StableDiffusion(ComposerModel):
                  text_latents_key: str = 'caption_latents',
                  precomputed_latents: bool = False,
                  encode_latents_in_fp16: bool = False,
-                 fsdp: bool = False):
+                 fsdp: bool = False,
+                 train_text_encoder: bool = False):
         super().__init__()
         self.unet = unet
         self.vae = vae
@@ -141,7 +142,8 @@ class StableDiffusion(ComposerModel):
         self.text_latents_key = text_latents_key
         self.encode_latents_in_fp16 = encode_latents_in_fp16
         # freeze text_encoder during diffusion training
-        self.text_encoder.requires_grad_(False)
+        if not train_text_encoder:
+            self.text_encoder.requires_grad_(False)
         self.vae.requires_grad_(False)
         if self.encode_latents_in_fp16:
             self.text_encoder.half()
@@ -149,6 +151,8 @@ class StableDiffusion(ComposerModel):
         if fsdp:
             # only wrap models we are training
             self.text_encoder._fsdp_wrap = False
+            if train_text_encoder:
+                self.text_encoder._fsdp_wrap = True
             self.vae._fsdp_wrap = False
             self.unet._fsdp_wrap = True
 

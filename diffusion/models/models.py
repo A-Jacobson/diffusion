@@ -41,6 +41,7 @@ def stable_diffusion_2(
     precomputed_latents: bool = False,
     encode_latents_in_fp16: bool = True,
     fsdp: bool = True,
+    train_text_encoder: bool = False
 ):
     """Stable diffusion v2 training setup.
 
@@ -120,12 +121,14 @@ def stable_diffusion_2(
         precomputed_latents=precomputed_latents,
         encode_latents_in_fp16=encode_latents_in_fp16,
         fsdp=fsdp,
+        train_text_encoder=train_text_encoder
     )
     if torch.cuda.is_available():
         model = DeviceGPU().module_to_device(model)
         if is_xformers_installed:
-            # model.unet.enable_xformers_memory_efficient_attention()
             model.vae.enable_xformers_memory_efficient_attention()
+            if isinstance(unet, UNet2DConditionModel):
+                model.unet.enable_xformers_memory_efficient_attention()
     return model
 
 

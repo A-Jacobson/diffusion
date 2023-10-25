@@ -242,7 +242,19 @@ class UViT(nn.Module):
         return {'sample': x}
     
 
-def uvit_huge(max_size=128, in_chans=4, embed_dim=1024,  clip_dim=1024, patch_size=2):
-    return UViT(max_size=max_size, patch_size=patch_size, in_chans=in_chans, 
-                embed_dim=embed_dim, clip_dim=clip_dim, depth=30, num_heads=24, 
+def uvit_large(max_size=128, in_chans=4,  clip_dim=1024, patch_size=2):
+    return UViT(max_size=max_size, patch_size=patch_size, in_chans=in_chans, clip_dim=clip_dim,
+                embed_dim=1024, depth=20, num_heads=16, 
+                mlp_ratio=4, qkv_bias=False, mlp_time_embed=False)
+
+def uvit_huge(max_size=128, in_chans=4,  clip_dim=1024, patch_size=2):
+    """300m params, similar flops to sd2 unet"""
+    return UViT(max_size=max_size, patch_size=patch_size, in_chans=in_chans, clip_dim=clip_dim,
+                embed_dim=1152, depth=28, num_heads=16, 
+                mlp_ratio=4, qkv_bias=False, mlp_time_embed=False)
+
+def uvit_1b(max_size=128, in_chans=4,  clip_dim=1024, patch_size=2):
+    """1b params, similar flops to sdxl unet"""
+    return UViT(max_size=max_size, patch_size=patch_size, in_chans=in_chans, clip_dim=clip_dim,
+                embed_dim=1536, depth=30, num_heads=24, 
                 mlp_ratio=4, qkv_bias=False, mlp_time_embed=False)

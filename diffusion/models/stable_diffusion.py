@@ -142,8 +142,7 @@ class StableDiffusion(ComposerModel):
         self.text_latents_key = text_latents_key
         self.encode_latents_in_fp16 = encode_latents_in_fp16
         # freeze text_encoder during diffusion training
-        if not train_text_encoder:
-            self.text_encoder.requires_grad_(False)
+        self.text_encoder.requires_grad_(train_text_encoder)
         self.vae.requires_grad_(False)
         if self.encode_latents_in_fp16:
             self.text_encoder.half()

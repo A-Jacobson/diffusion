@@ -18,6 +18,7 @@ install_requires = [
     'torchmetrics[image]==0.11.4',
     'clean-fid',
     'clip@git+https://github.com/openai/CLIP.git',
+    'einops'
 ]
 
 extras_require = {}

@@ -10,6 +10,7 @@ import torch.nn.functional as F
 from composer.models import ComposerModel
 from torchmetrics import MeanSquaredError, Metric
 from tqdm.auto import tqdm
+from diffusers import UNet2DConditionModel
 
 
 class StableDiffusion(ComposerModel):
@@ -370,12 +371,14 @@ class StableDiffusion(ComposerModel):
         for t in tqdm(self.inference_scheduler.timesteps, disable=not progress_bar):
             if do_classifier_free_guidance:
                 latent_model_input = torch.cat([latents] * 2)
+                timestep = torch.cat([t.unsqueeze(0)] * 2)
             else:
-                latent_model_input = latents
+                latent_model_input = latents    
+                timestep = t.unsqueeze(0)
 
             latent_model_input = self.inference_scheduler.scale_model_input(latent_model_input, t)
             # Model prediction
-            pred = self.unet(latent_model_input, t.unsqueeze(0), text_embeddings)['sample']
+            pred = self.unet(latent_model_input, timestep, text_embeddings)['sample']
 
             if do_classifier_free_guidance:
                 # perform guidance. Note this is only techincally correct for prediction_type 'epsilon'

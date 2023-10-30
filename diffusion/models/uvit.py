@@ -216,7 +216,6 @@ class UViT(nn.Module):
     def forward(self, x, timesteps, context):
         x = self.patch_embed(x) 
         B, L, D = x.shape
-
         time_token = self.time_embed(timestep_embedding(timesteps, self.embed_dim))
         time_token = time_token.unsqueeze(dim=1)
         context_token = self.context_embed(context)

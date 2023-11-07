@@ -12,9 +12,9 @@ from PIL import Image
 from streaming import Stream, StreamingDataset
 from torch.utils.data import DataLoader
 from torchvision import transforms
-from transformers import AutoTokenizer
 
 from diffusion.datasets.laion.transforms import LargestCenterSquare
+from diffusion.models import build_tokenizer
 
 # Disable PIL max image size limit
 Image.MAX_IMAGE_PIXELS = None
@@ -65,7 +65,7 @@ class StreamingImageCaptionDataset(StreamingDataset):
             raise ValueError(f'Invalid caption selection: {caption_selection}. Must be one of [random, first]')
 
         self.transform = transform
-        self.tokenizer = AutoTokenizer.from_pretrained(tokenizer_name_or_path, subfolder='tokenizer')
+        self.tokenizer = build_tokenizer(tokenizer_name_or_path)
         self.caption_drop_prob = caption_drop_prob
         self.caption_selection = caption_selection
         self.image_size = image_size
@@ -93,6 +93,8 @@ class StreamingImageCaptionDataset(StreamingDataset):
                 caption = caption[0]
             if isinstance(caption, List) and self.caption_selection == 'random':
                 caption = random.sample(caption, k=1)[0]
+        if 'e5' in self.tokenizer_name_or_path:
+            caption = f'query: {caption}'
         tokenized_caption = self.tokenizer(caption,
                                            padding='max_length',
                                            max_length=self.tokenizer.model_max_length,

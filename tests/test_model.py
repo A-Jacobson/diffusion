@@ -8,6 +8,8 @@ import pytest
 import torch
 
 from diffusion.models.models import stable_diffusion_2
+from transformers import PretrainedConfig
+from diffusers import UNet2DConditionModel
 
 
 def test_model_forward():
@@ -44,3 +46,13 @@ def test_model_generate(guidance_scale, negative_prompt):
         progress_bar=False,
     )
     assert output.shape == (1, 3, 8, 8)
+
+def test_unet_e5():
+    config = PretrainedConfig.get_config_dict(pretrained_model_name_or_path='stabilityai/stable-diffusion-2-base',
+                                                subfolder='unet')
+    unet = UNet2DConditionModel(**config[0])
+    mock_e5_output = torch.randn(2, 6, 1024) # bs, num tokens, embedding_dim conditioning
+    mock_timesteps = torch.randint(0, 1000, (2,)) # randn 1-1000, batch_Size
+    mock_noised_latents = torch.randn(2, 4, 8, 8) # bs, 8, 8, 4
+    output = unet(mock_noised_latents, mock_timesteps, mock_e5_output)['sample']
+    assert output.shape == (2, 4, 8, 8)

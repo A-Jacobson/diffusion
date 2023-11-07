@@ -11,7 +11,8 @@ from diffusers import AutoencoderKL, DDIMScheduler, DDPMScheduler, UNet2DConditi
 from torchmetrics import MeanSquaredError
 from torchmetrics.image.fid import FrechetInceptionDistance
 from torchmetrics.multimodal.clip_score import CLIPScore
-from transformers import CLIPTextModel, CLIPTokenizer, PretrainedConfig
+from transformers import (CLIPTextModel, CLIPTokenizer, PretrainedConfig, 
+                          AutoTokenizer, AutoModel, T5Tokenizer, T5EncoderModel)
 
 from diffusion.models.pixel_diffusion import PixelDiffusion
 from diffusion.models.stable_diffusion import StableDiffusion
@@ -24,6 +25,36 @@ try:
     is_xformers_installed = True
 except:
     is_xformers_installed = False
+
+def build_text_encoder(name:str='stabilityai/stable-diffusion-2-base', torch_dtype:torch.dtype=torch.float32):
+    text_encoders = {
+        'stabilityai/stable-diffusion-2-base': CLIPTextModel.from_pretrained('stabilityai/stable-diffusion-2-base',
+                                            subfolder='text_encoder', 
+                                            torch_dtype=torch_dtype),
+        'e5-base': AutoModel.from_pretrained('intfloat/e5-base-v2', 
+                                            torch_dtype=torch_dtype),
+        'e5-large': AutoModel.from_pretrained('intfloat/e5-large-v2', 
+                                            torch_dtype=torch_dtype), 
+        't5-base': T5EncoderModel.from_pretrained('google/t5-v1_1-base', 
+                                            torch_dtype=torch_dtype),
+        't5-xxl': T5EncoderModel.from_pretrained('google/t5-v1_1-xxl', 
+                                            torch_dtype=torch_dtype)
+    }
+    return text_encoders[name]
+
+def build_tokenizer(name:str='stabilityai/stable-diffusion-2-base'):
+    tokenizers = {
+        'stabilityai/stable-diffusion-2-base': CLIPTokenizer.from_pretrained('stabilityai/stable-diffusion-2-base',
+                                            subfolder='tokenizer'),
+        'e5-base': AutoTokenizer.from_pretrained('intfloat/e5-base-v2'),
+        'e5-large': AutoTokenizer.from_pretrained('intfloat/e5-large-v2'),
+        't5-base': T5Tokenizer.from_pretrained('google/t5-v1_1-base'),
+        't5-xxl': T5Tokenizer.from_pretrained('google/t5-v1_1-xxl'),
+    }
+    return tokenizers[name]
+
+
+
 
 
 def stable_diffusion_2(
@@ -41,6 +72,7 @@ def stable_diffusion_2(
     precomputed_latents: bool = False,
     encode_latents_in_fp16: bool = True,
     fsdp: bool = True,
+    text_encoder_name = 'stabilityai/stable-diffusion-2-base',
     train_text_encoder: bool = False
 ):
     """Stable diffusion v2 training setup.
@@ -87,14 +119,10 @@ def stable_diffusion_2(
         config = PretrainedConfig.get_config_dict(model_name, subfolder='unet')
         unet = UNet2DConditionModel(**config[0])
 
-    if encode_latents_in_fp16:
-        vae = AutoencoderKL.from_pretrained(model_name, subfolder='vae', torch_dtype=torch.float16)
-        text_encoder = CLIPTextModel.from_pretrained(model_name, subfolder='text_encoder', torch_dtype=torch.float16)
-    else:
-        vae = AutoencoderKL.from_pretrained(model_name, subfolder='vae')
-        text_encoder = CLIPTextModel.from_pretrained(model_name, subfolder='text_encoder')
-
-    tokenizer = CLIPTokenizer.from_pretrained(model_name, subfolder='tokenizer')
+    torch_dtype = torch.float16 if encode_latents_in_fp16 else torch.float32
+    text_encoder = build_text_encoder(text_encoder_name, torch_dtype)
+    tokenizer = build_tokenizer(text_encoder_name)
+    vae = AutoencoderKL.from_pretrained(model_name, subfolder='vae', torch_dtype=torch_dtype)
     noise_scheduler = DDPMScheduler.from_pretrained(model_name, subfolder='scheduler')
     inference_noise_scheduler = DDIMScheduler(num_train_timesteps=noise_scheduler.config.num_train_timesteps,
                                               beta_start=noise_scheduler.config.beta_start,

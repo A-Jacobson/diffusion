@@ -72,7 +72,7 @@ def stable_diffusion_2(
     precomputed_latents: bool = False,
     encode_latents_in_fp16: bool = True,
     fsdp: bool = True,
-    text_encoder_name = 'stabilityai/stable-diffusion-2-base',
+    text_encoder_name_or_path = 'stabilityai/stable-diffusion-2-base',
     train_text_encoder: bool = False
 ):
     """Stable diffusion v2 training setup.
@@ -120,8 +120,8 @@ def stable_diffusion_2(
         unet = UNet2DConditionModel(**config[0])
 
     torch_dtype = torch.float16 if encode_latents_in_fp16 else torch.float32
-    text_encoder = build_text_encoder(text_encoder_name, torch_dtype)
-    tokenizer = build_tokenizer(text_encoder_name)
+    text_encoder = build_text_encoder(text_encoder_name_or_path, torch_dtype)
+    tokenizer = build_tokenizer(text_encoder_name_or_path)
     vae = AutoencoderKL.from_pretrained(model_name, subfolder='vae', torch_dtype=torch_dtype)
     noise_scheduler = DDPMScheduler.from_pretrained(model_name, subfolder='scheduler')
     inference_noise_scheduler = DDIMScheduler(num_train_timesteps=noise_scheduler.config.num_train_timesteps,

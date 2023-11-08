@@ -26,33 +26,45 @@ try:
 except:
     is_xformers_installed = False
 
-TEXT_ENCODERS = {
-    'stabilityai/stable-diffusion-2-base': CLIPTextModel.from_pretrained('stabilityai/stable-diffusion-2-base',
-                                        subfolder='text_encoder'), 
-    'e5-base': AutoModel.from_pretrained('intfloat/e5-base-v2'),
-    'e5-large': AutoModel.from_pretrained('intfloat/e5-large-v2'),
-    't5-base': T5EncoderModel.from_pretrained('google/t5-v1_1-base'),
-    't5-xxl': T5EncoderModel.from_pretrained('google/t5-v1_1-xxl')
-    }
 
-TOKENIZERS = {
-        'stabilityai/stable-diffusion-2-base': CLIPTokenizer.from_pretrained('stabilityai/stable-diffusion-2-base',
-                                            subfolder='tokenizer'),
-        'e5-base': AutoTokenizer.from_pretrained('intfloat/e5-base-v2'),
-        'e5-large': AutoTokenizer.from_pretrained('intfloat/e5-large-v2'),
-        't5-base': T5Tokenizer.from_pretrained('google/t5-v1_1-base', legacy=False),
-        't5-xxl': T5Tokenizer.from_pretrained('google/t5-v1_1-xxl', legacy=False),
-    }
 
-def build_unet(model_name:str = 'stabilityai/stable-diffusion-2-base'):
+def build_text_encoder(text_encoder_name_or_path: str='stabilityai/stable-diffusion-2-base'):
+    if text_encoder_name_or_path == 'stabilityai/stable-diffusion-2-base':
+        return CLIPTextModel.from_pretrained('stabilityai/stable-diffusion-2-base',
+                                        subfolder='text_encoder')
+    elif text_encoder_name_or_path == 'e5-base':
+        return AutoModel.from_pretrained('intfloat/e5-base-v2')
+    elif text_encoder_name_or_path == 'e5-large':
+        return AutoModel.from_pretrained('intfloat/e5-large-v2')
+    elif text_encoder_name_or_path == 't5-base':
+        return T5EncoderModel.from_pretrained('google/t5-v1_1-base')
+    elif text_encoder_name_or_path == 't5-xxl':
+        return T5EncoderModel.from_pretrained('google/t5-v1_1-xxl')
+
+
+def build_tokenizer(tokenizer_name):
+    if tokenizer_name == 'stabilityai/stable-diffusion-2-base':
+        return CLIPTokenizer.from_pretrained('stabilityai/stable-diffusion-2-base',
+                                                subfolder='tokenizer')
+    elif tokenizer_name == 'e5-base':
+        return AutoTokenizer.from_pretrained('intfloat/e5-base-v2')
+    elif tokenizer_name == 'e5-large':
+        return AutoTokenizer.from_pretrained('intfloat/e5-large-v2')
+    elif tokenizer_name == 't5-base':
+        return T5Tokenizer.from_pretrained('google/t5-v1_1-base', legacy=False)
+    elif tokenizer_name == 't5-xxl':
+        return T5Tokenizer.from_pretrained('google/t5-v1_1-base', legacy=False)
+
+
+def build_unet(model_name:str = 'sd2-pretrained'):
     """unet architecture, no weights"""
-    config = PretrainedConfig.get_config_dict(model_name, subfolder='unet')
-    return UNet2DConditionModel(**config[0])
-
-UNETS = {'sd2-pretrained': UNet2DConditionModel.from_pretrained('stabilityai/stable-diffusion-2-base', subfolder='unet'),
-         'sd2': build_unet(),
-         'uvit-huge-ps2':  uvit_huge(max_size=128, patch_size=2) # max size 128 allows for images up to 1024px
-         }
+    if model_name == 'sd2':
+        config = PretrainedConfig.get_config_dict(model_name, subfolder='unet')
+        return UNet2DConditionModel(**config[0])
+    elif model_name == 'sd2-pretrained':
+        return UNet2DConditionModel.from_pretrained('stabilityai/stable-diffusion-2-base', subfolder='unet')
+    elif model_name == 'uvit-huge-ps2':
+        return uvit_huge(max_size=128, patch_size=2) # max size 128 allows for images up to 1024px
 
 
 def stable_diffusion_2(
@@ -107,9 +119,9 @@ def stable_diffusion_2(
             metric.requires_grad_(False)
 
 
-    unet = UNETS[unet_name]
-    text_encoder = TEXT_ENCODERS[text_encoder_name_or_path]
-    tokenizer = TOKENIZERS[text_encoder_name_or_path]
+    unet = build_unet(unet_name)
+    text_encoder = build_text_encoder(text_encoder_name_or_path)
+    tokenizer = build_tokenizer(text_encoder_name_or_path)
     vae = AutoencoderKL.from_pretrained(model_name, subfolder='vae')
     noise_scheduler = DDPMScheduler.from_pretrained(model_name, subfolder='scheduler')
     inference_noise_scheduler = DDIMScheduler(num_train_timesteps=noise_scheduler.config.num_train_timesteps,

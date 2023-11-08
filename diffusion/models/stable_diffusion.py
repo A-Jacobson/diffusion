@@ -10,7 +10,6 @@ import torch.nn.functional as F
 from composer.models import ComposerModel
 from torchmetrics import MeanSquaredError, Metric
 from tqdm.auto import tqdm
-from diffusers import UNet2DConditionModel
 
 
 class StableDiffusion(ComposerModel):

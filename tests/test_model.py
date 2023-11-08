@@ -11,10 +11,10 @@ from diffusion.models.models import stable_diffusion_2
 from transformers import PretrainedConfig
 from diffusers import UNet2DConditionModel
 
-
-def test_model_forward():
+@pytest.mark.parameterize('unet_name', ['sd2', 'uvit-huge-ps2'])
+def test_model_forward(unet_name):
     # fp16 vae does not run on cpu
-    model = stable_diffusion_2(pretrained=False, fsdp=False, encode_latents_in_fp16=False)
+    model = stable_diffusion_2(unet_name=unet_name, fsdp=False, encode_latents_in_fp16=False)
     batch_size = 1
     H = 8
     W = 8
@@ -29,12 +29,12 @@ def test_model_forward():
     assert output.shape == latent.shape
     assert target.shape == latent.shape
 
-
+@pytest.mark.parameterize('unet_name', ['sd2', 'uvit-huge-ps2'])
 @pytest.mark.parametrize('guidance_scale', [0.0, 3.0])
 @pytest.mark.parametrize('negative_prompt', [None, 'so cool'])
-def test_model_generate(guidance_scale, negative_prompt):
+def test_model_generate(unet_name, guidance_scale, negative_prompt):
     # fp16 vae does not run on cpu
-    model = stable_diffusion_2(pretrained=False, fsdp=False, encode_latents_in_fp16=False)
+    model = stable_diffusion_2(unet_name=unet_name, fsdp=False, encode_latents_in_fp16=False)
     output = model.generate(
         prompt='a cool doge',
         negative_prompt=negative_prompt,

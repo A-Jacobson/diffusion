@@ -19,7 +19,8 @@ install_requires = [
     'clean-fid',
     'clip@git+https://github.com/openai/CLIP.git',
     'einops',
-    'lion-pytorch'
+    'lion-pytorch',
+    'sentencepiece'
 ]
 
 extras_require = {}

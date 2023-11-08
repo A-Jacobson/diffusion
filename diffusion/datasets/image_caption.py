@@ -65,6 +65,7 @@ class StreamingImageCaptionDataset(StreamingDataset):
             raise ValueError(f'Invalid caption selection: {caption_selection}. Must be one of [random, first]')
 
         self.transform = transform
+        self.tokenizer_name_or_path = tokenizer_name_or_path
         self.tokenizer = build_tokenizer(tokenizer_name_or_path)
         self.caption_drop_prob = caption_drop_prob
         self.caption_selection = caption_selection

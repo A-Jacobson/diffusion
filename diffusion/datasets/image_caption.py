@@ -14,7 +14,7 @@ from torch.utils.data import DataLoader
 from torchvision import transforms
 
 from diffusion.datasets.laion.transforms import LargestCenterSquare
-from diffusion.models import build_tokenizer
+from diffusion.models import TOKENIZERS
 
 # Disable PIL max image size limit
 Image.MAX_IMAGE_PIXELS = None
@@ -66,7 +66,7 @@ class StreamingImageCaptionDataset(StreamingDataset):
 
         self.transform = transform
         self.tokenizer_name_or_path = tokenizer_name_or_path
-        self.tokenizer = build_tokenizer(tokenizer_name_or_path)
+        self.tokenizer = TOKENIZERS[tokenizer_name_or_path]
         self.caption_drop_prob = caption_drop_prob
         self.caption_selection = caption_selection
         self.image_size = image_size

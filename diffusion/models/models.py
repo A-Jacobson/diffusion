@@ -26,43 +26,38 @@ try:
 except:
     is_xformers_installed = False
 
-def build_text_encoder(name:str='stabilityai/stable-diffusion-2-base', torch_dtype:torch.dtype=torch.float32):
-    text_encoders = {
-        'stabilityai/stable-diffusion-2-base': CLIPTextModel.from_pretrained('stabilityai/stable-diffusion-2-base',
-                                            subfolder='text_encoder', 
-                                            torch_dtype=torch_dtype),
-        'e5-base': AutoModel.from_pretrained('intfloat/e5-base-v2', 
-                                            torch_dtype=torch_dtype),
-        'e5-large': AutoModel.from_pretrained('intfloat/e5-large-v2', 
-                                            torch_dtype=torch_dtype), 
-        't5-base': T5EncoderModel.from_pretrained('google/t5-v1_1-base', 
-                                            torch_dtype=torch_dtype),
-        't5-xxl': T5EncoderModel.from_pretrained('google/t5-v1_1-xxl', 
-                                            torch_dtype=torch_dtype)
+TEXT_ENCODERS = {
+    'stabilityai/stable-diffusion-2-base': CLIPTextModel.from_pretrained('stabilityai/stable-diffusion-2-base',
+                                        subfolder='text_encoder'), 
+    'e5-base': AutoModel.from_pretrained('intfloat/e5-base-v2'),
+    'e5-large': AutoModel.from_pretrained('intfloat/e5-large-v2'),
+    't5-base': T5EncoderModel.from_pretrained('google/t5-v1_1-base'),
+    't5-xxl': T5EncoderModel.from_pretrained('google/t5-v1_1-xxl')
     }
-    return text_encoders[name]
 
-def build_tokenizer(name:str='stabilityai/stable-diffusion-2-base'):
-    tokenizers = {
+TOKENIZERS = {
         'stabilityai/stable-diffusion-2-base': CLIPTokenizer.from_pretrained('stabilityai/stable-diffusion-2-base',
                                             subfolder='tokenizer'),
         'e5-base': AutoTokenizer.from_pretrained('intfloat/e5-base-v2'),
         'e5-large': AutoTokenizer.from_pretrained('intfloat/e5-large-v2'),
-        't5-base': T5Tokenizer.from_pretrained('google/t5-v1_1-base'),
-        't5-xxl': T5Tokenizer.from_pretrained('google/t5-v1_1-xxl'),
+        't5-base': T5Tokenizer.from_pretrained('google/t5-v1_1-base', legacy=False),
+        't5-xxl': T5Tokenizer.from_pretrained('google/t5-v1_1-xxl', legacy=False),
     }
-    return tokenizers[name]
 
+def build_unet(model_name:str = 'stabilityai/stable-diffusion-2-base'):
+    """unet architecture, no weights"""
+    config = PretrainedConfig.get_config_dict(model_name, subfolder='unet')
+    return UNet2DConditionModel(**config[0])
 
-
+UNETS = {'sd2-pretrained': UNet2DConditionModel.from_pretrained('stabilityai/stable-diffusion-2-base', subfolder='unet'),
+         'sd2': build_unet(),
+         'uvit-huge-ps2':  uvit_huge(max_size=128, patch_size=2) # max size 128 allows for images up to 1024px
+         }
 
 
 def stable_diffusion_2(
     model_name: str = 'stabilityai/stable-diffusion-2-base',
-    pretrained: bool = True,
-    use_uvit: bool = False,
-    max_size: int = 128,
-    patch_size: int = 2,
+    unet_name:str = 'sd2',
     prediction_type: str = 'epsilon',
     train_metrics: Optional[List] = None,
     val_metrics: Optional[List] = None,
@@ -111,18 +106,11 @@ def stable_diffusion_2(
         if isinstance(metric, CLIPScore):
             metric.requires_grad_(False)
 
-    if pretrained:
-        unet = UNet2DConditionModel.from_pretrained(model_name, subfolder='unet')
-    elif use_uvit:
-        unet = uvit_huge(max_size=max_size, patch_size=patch_size) 
-    else:
-        config = PretrainedConfig.get_config_dict(model_name, subfolder='unet')
-        unet = UNet2DConditionModel(**config[0])
 
-    torch_dtype = torch.float16 if encode_latents_in_fp16 else torch.float32
-    text_encoder = build_text_encoder(text_encoder_name_or_path, torch_dtype)
-    tokenizer = build_tokenizer(text_encoder_name_or_path)
-    vae = AutoencoderKL.from_pretrained(model_name, subfolder='vae', torch_dtype=torch_dtype)
+    unet = UNETS[unet_name]
+    text_encoder = TEXT_ENCODERS[text_encoder_name_or_path]
+    tokenizer = TOKENIZERS[text_encoder_name_or_path]
+    vae = AutoencoderKL.from_pretrained(model_name, subfolder='vae')
     noise_scheduler = DDPMScheduler.from_pretrained(model_name, subfolder='scheduler')
     inference_noise_scheduler = DDIMScheduler(num_train_timesteps=noise_scheduler.config.num_train_timesteps,
                                               beta_start=noise_scheduler.config.beta_start,

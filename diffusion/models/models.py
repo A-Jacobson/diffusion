@@ -59,7 +59,7 @@ def build_tokenizer(tokenizer_name):
 def build_unet(model_name:str = 'sd2-pretrained'):
     """unet architecture, no weights"""
     if model_name == 'sd2':
-        config = PretrainedConfig.get_config_dict(model_name, subfolder='unet')
+        config = PretrainedConfig.get_config_dict('stabilityai/stable-diffusion-2-base', subfolder='unet')
         return UNet2DConditionModel(**config[0])
     elif model_name == 'sd2-pretrained':
         return UNet2DConditionModel.from_pretrained('stabilityai/stable-diffusion-2-base', subfolder='unet')

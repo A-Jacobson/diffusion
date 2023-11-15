@@ -97,6 +97,7 @@ class StableDiffusion(ComposerModel):
         self.noise_scheduler = noise_scheduler
         self.loss_fn = loss_fn
         self.prediction_type = prediction_type.lower()
+        self.train_text_encoder = train_text_encoder
         if self.prediction_type not in ['sample', 'epsilon', 'v_prediction']:
             raise ValueError(f'prediction type must be one of sample, epsilon, or v_prediction. Got {prediction_type}')
         self.offset_noise = offset_noise

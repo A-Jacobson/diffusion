@@ -12,12 +12,16 @@ from diffusion.models.text_encoder import MultiTextEncoder, MultiTokenizer
 tokenizer_to_max_len = {
     'stabilityai/stable-diffusion-xl-base-1.0/tokenizer': 77,
     'stabilityai/stable-diffusion-xl-base-1.0/tokenizer_2': 77,
-    'intfloat/e5-large-v2': 512
+    'intfloat/e5-large-v2': 512,
+    'google/t5-v1_1-small': 512
 }
 tokenizers = [
-    'stabilityai/stable-diffusion-xl-base-1.0/tokenizer', 'stabilityai/stable-diffusion-xl-base-1.0/tokenizer_2',
-    'intfloat/e5-large-v2'
+    'stabilityai/stable-diffusion-xl-base-1.0/tokenizer', 
+    'stabilityai/stable-diffusion-xl-base-1.0/tokenizer_2', 
+    'intfloat/e5-large-v2', 
+    'google/t5-v1_1-small'
 ]
+
 tokenizer_combins = tokenizers.copy()
 for i in range(2, len(tokenizers) + 1):
     tokenizer_combins += list(itertools.combinations(tokenizers, i))
@@ -49,11 +53,15 @@ def test_multi_tokenizer(prompt, tokenizer_names):
 text_encoder_dims = {
     'stabilityai/stable-diffusion-xl-base-1.0/text_encoder': 768,
     'stabilityai/stable-diffusion-xl-base-1.0/text_encoder_2': 1280,
-    'intfloat/e5-large-v2': 1024
+    'intfloat/e5-large-v2': 1024,
+    'google/t5-v1_1-small': 512
 }
+
 text_encoders = [
-    'stabilityai/stable-diffusion-xl-base-1.0/text_encoder', 'stabilityai/stable-diffusion-xl-base-1.0/text_encoder_2',
-    'intfloat/e5-large-v2'
+    'stabilityai/stable-diffusion-xl-base-1.0/text_encoder', 
+    'stabilityai/stable-diffusion-xl-base-1.0/text_encoder_2',
+    'intfloat/e5-large-v2', 
+    'google/t5-v1_1-small'
 ]
 text_encoder_combins = text_encoders.copy()
 for i in range(2, len(text_encoders) + 1):

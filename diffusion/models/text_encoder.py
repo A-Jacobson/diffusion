@@ -7,7 +7,7 @@ import textwrap
 from typing import List, Optional, Tuple, Union
 
 import torch
-from transformers import AutoModel, AutoTokenizer, CLIPTextModel, CLIPTextModelWithProjection, PretrainedConfig
+from transformers import AutoModel, AutoTokenizer, CLIPTextModel, CLIPTextModelWithProjection, PretrainedConfig, T5EncoderModel
 
 
 class MultiTextEncoder(torch.nn.Module):
@@ -75,6 +75,10 @@ class MultiTextEncoder(torch.nn.Module):
                 self.text_encoders.append(
                     CLIPTextModelWithProjection.from_pretrained(base_name, subfolder=subfolder,
                                                                 torch_dtype=torch_dtype))
+            elif architectures == ['T5ForConditionalGeneration']:
+                self.text_encoders.append(
+                    T5EncoderModel.from_pretrained(base_name, subfolder=subfolder,
+                                                    torch_dtype=torch_dtype))
             else:
                 self.text_encoders.append(
                     AutoModel.from_pretrained(base_name, subfolder=subfolder, torch_dtype=torch_dtype))
@@ -98,17 +102,22 @@ class MultiTextEncoder(torch.nn.Module):
         all_text_embed = []
         all_pooled_text = []
         for i in range(len(self.text_encoders)):
-            output_hidden_states = self.architectures[i] in ['CLIPTextModel', 'CLIPTextModelWithProjection']
+            output_hidden_states = False
+            if self.architectures[i] in {'CLIPTextModel', 'CLIPTextModelWithProjection'}:
+                output_hidden_states = True
+
             out = self.text_encoders[i](input_ids=input_ids[:, i],
                                         attention_mask=attention_mask[:, i] if attention_mask is not None else None,
                                         output_hidden_states=output_hidden_states)
+            
             text_embed = out.hidden_states[-2] if output_hidden_states else out[0]
             all_text_embed.append(text_embed)
 
-            if self.architectures[i] == 'CLIPTextModelWithProjection':
+            if self.architectures[i] in 'CLIPTextModelWithProjection':
                 pooled_text = out[0]
                 all_pooled_text.append(pooled_text)
-            elif not self.pretrained_sdxl:
+
+            elif not self.pretrained_sdxl and self.architectures[i] != 'T5ForConditionalGeneration':
                 pooled_text = out[1]
                 all_pooled_text.append(pooled_text)
 

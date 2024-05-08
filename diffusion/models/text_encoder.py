@@ -58,7 +58,8 @@ class MultiTextEncoder(torch.nn.Module):
                 if model_dim_key in text_encoder_config:
                     self.text_encoder_dim += text_encoder_config[model_dim_key]
                     # This does not add to proj_dim when pretrained and architecture is CLIPTextModel
-                    if not self.pretrained_sdxl or text_encoder_config['architectures'] in {'CLIPTextModel', 'T5ForConditionalGeneration'}:
+                    architectures = text_encoder_config['architectures']
+                    if (not self.pretrained_sdxl or architectures != ['CLIPTextModel']) and architectures != ['T5ForConditionalGeneration']:
                         self.text_encoder_proj_dim += text_encoder_config[model_dim_key]
                     dim_found = True
             if not dim_found:

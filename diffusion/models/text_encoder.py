@@ -125,14 +125,14 @@ class MultiTextEncoder(torch.nn.Module):
         print('all text embed', len(all_text_embed))
         for embed in all_text_embed:
             print('text embed shape', embed.shape)
-            print('text embed device', embed.dtype)
+            print('text embed dtype', embed.dtype)
             print('text embed mean', embed.mean())
             print('text embed std', embed.std())
 
         print('all pooled text', len(all_pooled_text))
         for embed in all_pooled_text:
             print('pooled embed shape', embed.shape)
-            print('pooled embed device', embed.dtype)
+            print('pooled embed dtype', embed.dtype)
             print('pooled embed mean', embed.mean())
             print('pooled embed stf', embed.std())
 

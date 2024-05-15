@@ -121,14 +121,14 @@ class MultiTextEncoder(torch.nn.Module):
             elif not self.pretrained_sdxl and self.architectures[i] != 'T5ForConditionalGeneration':
                 pooled_text = out[1]
                 all_pooled_text.append(pooled_text)
-                
+
         for embed in all_text_embed:
-            print('text embed shape', embed.shape())
+            print('text embed shape', embed.shape)
             print('text embed mean', embed.mean())
             print('text embed std', embed.std())
 
         for embed in all_pooled_text:
-            print('pooled embed shape', embed.shape())
+            print('pooled embed shape', embed.shape)
             print('pooled embed mean', embed.mean())
             print('pooled embed srd', embed.std())
 

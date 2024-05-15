@@ -114,7 +114,7 @@ class MultiTextEncoder(torch.nn.Module):
             text_embed = out.hidden_states[-2] if output_hidden_states else out[0]
             all_text_embed.append(text_embed)
 
-            if self.architectures[i] in 'CLIPTextModelWithProjection':
+            if self.architectures[i] == 'CLIPTextModelWithProjection':
                 pooled_text = out[0]
                 all_pooled_text.append(pooled_text)
 

@@ -14,6 +14,7 @@ from transformers import CLIPTextModel, CLIPTokenizer, PretrainedConfig
 
 from diffusion.models.autoencoder import (AutoEncoder, AutoEncoderLoss, ComposerAutoEncoder,
                                           ComposerDiffusersAutoEncoder, load_autoencoder)
+from diffusion.models.clip import load_clip_text_encoder
 from diffusion.models.layers import ClippedAttnProcessor2_0, ClippedXFormersAttnProcessor, zero_module
 from diffusion.models.pixel_diffusion import PixelDiffusion
 from diffusion.models.stable_diffusion import StableDiffusion
@@ -238,6 +239,8 @@ def stable_diffusion_xl(
     unet_model_name: str = 'stabilityai/stable-diffusion-xl-base-1.0',
     vae_model_name: str = 'madebyollin/sdxl-vae-fp16-fix',
     pretrained: bool = True,
+    text_encoder_path: Optional[str] = None,
+    text_encoder_local_path: Optional[str] = '/tmp/text_encoder_weights.pt',
     autoencoder_path: Optional[str] = None,
     autoencoder_local_path: str = '/tmp/autoencoder_weights.pt',
     prediction_type: str = 'epsilon',
@@ -324,11 +327,14 @@ def stable_diffusion_xl(
     if val_metrics is None:
         val_metrics = [MeanSquaredError()]
 
-    # Make the tokenizer and text encoder
-    tokenizer = MultiTokenizer(tokenizer_names_or_paths=tokenizer_names)
-    text_encoder = MultiTextEncoder(model_names=text_encoder_names,
-                                    encode_latents_in_fp16=encode_latents_in_fp16,
-                                    pretrained_sdxl=pretrained)
+    if text_encoder_path is None:
+        # Make the tokenizer and text encoder
+        tokenizer = MultiTokenizer(tokenizer_names_or_paths=tokenizer_names)
+        text_encoder = MultiTextEncoder(model_names=text_encoder_names,
+                                        encode_latents_in_fp16=encode_latents_in_fp16,
+                                        pretrained_sdxl=pretrained)
+    else:
+        clip = 
 
     precision = torch.float16 if encode_latents_in_fp16 else None
     # Make the autoencoder

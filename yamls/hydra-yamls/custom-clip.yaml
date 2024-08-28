@@ -1,0 +1,197 @@
+seed: 17
+
+algorithms:
+  low_precision_layernorm:
+    attribute: unet
+    precision: amp_fp16
+  low_precision_groupnorm:
+    attribute: unet
+    precision: amp_fp16
+  pin_rng:
+    _target_: diffusion.algorithms.pin_diffusion_rng.PinDiffusionRNG
+
+model:
+  _target_: diffusion.models.models.stable_diffusion_xl
+  autoencoder_path: oci://sstk-dataset-checkpoints/sstk-v0/4-channel-autoencoder/ep1-ba141696-rank0.pt
+  text_encoder_path: oci://sstk-dataset-checkpoints-phoenix/clip-sstk-vitl-1m-lowbeta-1e3-longwarmup/latest-rank0.pt
+  latent_mean:
+  - 0.0631
+  - 0.043
+  - -1.058
+  - 0.8889
+  latent_std:
+  - 3.7451
+  - 1.9134
+  - 3.403
+  - 2.5733
+  prediction_type: epsilon
+  clip_qkv: null
+  mask_pad_tokens: true
+  pretrained: false
+  precomputed_latents: false
+  encode_latents_in_fp16: true
+  fsdp: true
+  use_xformers: false
+  val_metrics:
+  - _target_: torchmetrics.MeanSquaredError
+dataset:
+  train_batch_size: 14336
+  eval_batch_size: 14336
+  train_dataset:
+    _target_: diffusion.datasets.image_caption.build_streaming_image_caption_dataloader
+    remote:
+    - oci://sstk-dataset/final-v5/train/768-1280/photo
+    - oci://sstk-dataset/final-v5/train/768-1280/illustration
+    - oci://sstk-dataset/final-v5/train/768-1280/vector
+    - oci://sstk-dataset/final-v5/train/1024-1024/photo
+    - oci://sstk-dataset/final-v5/train/1024-1024/illustration
+    - oci://sstk-dataset/final-v5/train/1024-1024/vector
+    - oci://sstk-dataset/final-v5/train/1280-768/photo
+    - oci://sstk-dataset/final-v5/train/1280-768/illustration
+    - oci://sstk-dataset/final-v5/train/1280-768/vector
+    local:
+    - /tmp/mds-cachesstk-dataset/final-v5/train/768-1280/photo
+    - /tmp/mds-cachesstk-dataset/final-v5/train/768-1280/illustration
+    - /tmp/mds-cachesstk-dataset/final-v5/train/768-1280/vector
+    - /tmp/mds-cachesstk-dataset/final-v5/train/1024-1024/photo
+    - /tmp/mds-cachesstk-dataset/final-v5/train/1024-1024/illustration
+    - /tmp/mds-cachesstk-dataset/final-v5/train/1024-1024/vector
+    - /tmp/mds-cachesstk-dataset/final-v5/train/1280-768/photo
+    - /tmp/mds-cachesstk-dataset/final-v5/train/1280-768/illustration
+    - /tmp/mds-cachesstk-dataset/final-v5/train/1280-768/vector
+    sdxl_conditioning: true
+    microcond_drop_prob: 0.1
+    zero_dropped_captions: true
+    caption_drop_prob: 0.1
+    crop_type: random
+    image_key: IMAGE
+    caption_key: DESCRIPTION
+    resize_size: 256
+    streaming_kwargs:
+      download_timeout: 300
+      num_canonical_nodes: 56
+      shuffle: true
+    dataloader_kwargs:
+      drop_last: true
+      prefetch_factor: 2
+      num_workers: 8
+      persistent_workers: true
+      pin_memory: true
+  eval_dataset:
+    _target_: diffusion.datasets.image_caption.build_streaming_image_caption_dataloader
+    remote:
+    - oci://sstk-dataset/final-v5/eval/768-1280/photo
+    - oci://sstk-dataset/final-v5/eval/768-1280/illustration
+    - oci://sstk-dataset/final-v5/eval/768-1280/vector
+    - oci://sstk-dataset/final-v5/eval/1024-1024/photo
+    - oci://sstk-dataset/final-v5/eval/1024-1024/illustration
+    - oci://sstk-dataset/final-v5/eval/1024-1024/vector
+    - oci://sstk-dataset/final-v5/eval/1280-768/photo
+    - oci://sstk-dataset/final-v5/eval/1280-768/illustration
+    - oci://sstk-dataset/final-v5/eval/1280-768/vector
+    local:
+    - /tmp/mds-cachesstk-dataset/final-v5/eval/768-1280/photo
+    - /tmp/mds-cachesstk-dataset/final-v5/eval/768-1280/illustration
+    - /tmp/mds-cachesstk-dataset/final-v5/eval/768-1280/vector
+    - /tmp/mds-cachesstk-dataset/final-v5/eval/1024-1024/photo
+    - /tmp/mds-cachesstk-dataset/final-v5/eval/1024-1024/illustration
+    - /tmp/mds-cachesstk-dataset/final-v5/eval/1024-1024/vector
+    - /tmp/mds-cachesstk-dataset/final-v5/eval/1280-768/photo
+    - /tmp/mds-cachesstk-dataset/final-v5/eval/1280-768/illustration
+    - /tmp/mds-cachesstk-dataset/final-v5/eval/1280-768/vector
+    sdxl_conditioning: true
+    zero_dropped_captions: true
+    resize_size: 256
+    image_key: IMAGE
+    caption_key: DESCRIPTION
+    dataloader_kwargs:
+      prefetch_factor: 2
+      num_workers: 8
+      persistent_workers: true
+      pin_memory: true
+optimizer:
+  _target_: torch.optim.AdamW
+  lr: 0.0002645751311064591
+  weight_decay: 0.01
+  betas:
+  - 0.9
+  - 0.95
+  eps: 1.0e-08
+scheduler:
+  _target_: composer.optim.ConstantWithWarmupScheduler
+  t_warmup: 10000ba
+logger:
+  wandb:
+    _target_: composer.loggers.wandb_logger.WandBLogger
+    name: sstk-v0-256
+    project: sstk-v0
+    group: sstk-v0-256
+callbacks:
+  speed_monitor:
+    _target_: composer.callbacks.speed_monitor.SpeedMonitor
+    window_size: 10
+  lr_monitor:
+    _target_: composer.callbacks.lr_monitor.LRMonitor
+  memory_monitor:
+    _target_: composer.callbacks.memory_monitor.MemoryMonitor
+  nan_catcher:
+    _target_: composer.callbacks.NaNMonitor
+  runtime_estimator:
+    _target_: composer.callbacks.runtime_estimator.RuntimeEstimator
+  garbage_collector:
+    _target_: diffusion.callbacks.scheduled_garbage_collector.ScheduledGarbageCollector
+    batch_interval: 2000
+  image_logger:
+    _target_: diffusion.callbacks.log_diffusion_images.LogDiffusionImages
+    size: 256
+    guidance_scale: 7.0
+    prompts:
+    - a couple waiting to cross the street underneath an umbrella.
+    - three men walking in the rain with umbrellas.
+    - a man is riding a red motor cycle, with baskets.
+    - a clock that has animal pictures instead of numbers.
+    - a brightly decorated bus sits on the road.
+    - a horse bucking with a rider on it, completely vertical, with another horse
+      and onlookers.
+    - a white and blue bus is on a city street at night.
+    - a large clock tower on a building by a river
+    - beans and other food is sitting on a plate.
+    - a group of people that are standing up on a tennis court
+    - A majestic lion jumping from a big stone at night
+    - Full length portrait of girl touching her injured back wearing a blue sweater.
+      Indoor studio shot isolated on red background.
+    - Cute couple on a date in the park on a sunny day
+    - Amazed man with blonde hair and beard wearing glasses and a hat is looking
+      at camera with opened mouth on green wall
+    - Young woman swimming front crawl stroke style in goggles and cap inside the
+      blue water indoor race pool
+    - A man holding a sign with a lightbulb and the word "inspiration"
+    - Young woman with a purple wig and a american army uniform
+    - A man eating a big plate of spaghetti
+trainer:
+  _target_: composer.Trainer
+  max_duration: 85714ba
+  eval_interval: 3000ba
+  device_train_microbatch_size: 32
+  run_name: sstk-v0-256
+  seed: 17
+  dist_timeout: 300
+  scale_schedule_ratio: 1.0
+  save_interval: 5000ba
+  save_overwrite: false
+  save_folder: oci://sstk-dataset-checkpoints/sstk-clip-256
+  autoresume: true
+  fsdp_config:
+    sharding_strategy: SHARD_GRAD_OP
+  progress_bar: false
+
+
+# command: 'cd diffusion
+
+#   pip install mosaicml[mlflow]
+
+#   pip install git+https://github.com/mlflow/mlflow.git@1ad9148fb828a2f7beaad8394967a0691344ff81
+
+#   composer run.py --config-path /mnt/config --config-name parameters   || ( (pkill
+#   python ||echo ''could not kill python'') & (pkill wandb-service || echo ''could
+#   not kill bar'') && exit 1)'

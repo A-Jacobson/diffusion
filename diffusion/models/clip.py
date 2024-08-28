@@ -158,6 +158,7 @@ def load_clip_text_encoder(load_path: str,
     # tokenizer = model.tokenizer # can use BPE tokenizer from HF/openai for ViTCLIP
     # TODO will need to load other (sentencepiece) tokenizers from siglip in the future.
     clip = model.model
+    clip.eval()
     text_encoder = CustomCLIPTextEncoder(clip.transformer, 
                                          clip.token_embedding,
                                          clip.positional_embedding,

@@ -8,6 +8,7 @@ from typing import List, Optional, Tuple, Union
 
 import torch
 from transformers import AutoModel, AutoTokenizer, CLIPTextModel, CLIPTextModelWithProjection, PretrainedConfig
+from diffusion.models.clip import load_clip_text_encoder
 
 
 class MultiTextEncoder(torch.nn.Module):
@@ -45,40 +46,48 @@ class MultiTextEncoder(torch.nn.Module):
         self.text_encoder_dim = 0
         self.text_encoder_proj_dim = 0
         self.architectures = []
+
+  
         for model_name in model_names:
             # Process model_name string and get model config
-            name_split = model_name.split('/')
-            base_name = '/'.join(name_split[:2])
-            subfolder = '/'.join(name_split[2:])
-            text_encoder_config = PretrainedConfig.get_config_dict(base_name, subfolder=subfolder)[0]
-
-            # Add text_encoder output dim to total dim
-            dim_found = False
-            for model_dim_key in model_dim_keys:
-                if model_dim_key in text_encoder_config:
-                    self.text_encoder_dim += text_encoder_config[model_dim_key]
-                    # This does not add to proj_dim when pretrained and architecture is CLIPTextModel
-                    if not self.pretrained_sdxl or text_encoder_config['architectures'] != ['CLIPTextModel']:
-                        self.text_encoder_proj_dim += text_encoder_config[model_dim_key]
-                    dim_found = True
-            if not dim_found:
-                raise ValueError(
-                    textwrap.dedent(f"""\
-                                    Did not find any model_dim_keys ({model_dim_keys}) in the config for {model_name}.\
-                                    Please specify the appropriate model_dim_keys for the target model config."""))
-
-            architectures = text_encoder_config['architectures']
-            if architectures == ['CLIPTextModel']:
-                self.text_encoders.append(
-                    CLIPTextModel.from_pretrained(base_name, subfolder=subfolder, torch_dtype=torch_dtype))
-            elif architectures == ['CLIPTextModelWithProjection']:
-                self.text_encoders.append(
-                    CLIPTextModelWithProjection.from_pretrained(base_name, subfolder=subfolder,
-                                                                torch_dtype=torch_dtype))
+            if model_name.endswith('.pt'):
+                self.text_encoders.append(load_clip_text_encoder(load_path=model_name, torch_dtype=torch_dtype))
+                self.text_encoder_dim += 768 # TODO: add this value to config
+                self.text_encoder_proj_dim += 768
+                self.architectures += ['CustomClipModel']
             else:
-                self.text_encoders.append(
-                    AutoModel.from_pretrained(base_name, subfolder=subfolder, torch_dtype=torch_dtype))
-            self.architectures += architectures
+                name_split = model_name.split('/')
+                base_name = '/'.join(name_split[:2])
+                subfolder = '/'.join(name_split[2:])
+                text_encoder_config = PretrainedConfig.get_config_dict(base_name, subfolder=subfolder)[0]
+
+                # Add text_encoder output dim to total dim
+                dim_found = False
+                for model_dim_key in model_dim_keys:
+                    if model_dim_key in text_encoder_config:
+                        self.text_encoder_dim += text_encoder_config[model_dim_key]
+                        # This does not add to proj_dim when pretrained and architecture is CLIPTextModel
+                        if not self.pretrained_sdxl or text_encoder_config['architectures'] != ['CLIPTextModel']:
+                            self.text_encoder_proj_dim += text_encoder_config[model_dim_key]
+                        dim_found = True
+                if not dim_found:
+                    raise ValueError(
+                        textwrap.dedent(f"""\
+                                        Did not find any model_dim_keys ({model_dim_keys}) in the config for {model_name}.\
+                                        Please specify the appropriate model_dim_keys for the target model config."""))
+
+                architectures = text_encoder_config['architectures']
+                if architectures == ['CLIPTextModel']:
+                    self.text_encoders.append(
+                        CLIPTextModel.from_pretrained(base_name, subfolder=subfolder, torch_dtype=torch_dtype))
+                elif architectures == ['CLIPTextModelWithProjection']:
+                    self.text_encoders.append(
+                        CLIPTextModelWithProjection.from_pretrained(base_name, subfolder=subfolder,
+                                                                    torch_dtype=torch_dtype))
+                else:
+                    self.text_encoders.append(
+                        AutoModel.from_pretrained(base_name, subfolder=subfolder, torch_dtype=torch_dtype))
+                self.architectures += architectures
 
     @property
     def device(self):

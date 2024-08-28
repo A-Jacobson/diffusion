@@ -334,7 +334,7 @@ def stable_diffusion_xl(
                                         encode_latents_in_fp16=encode_latents_in_fp16,
                                         pretrained_sdxl=pretrained)
     else:
-        clip = 
+        tokenizer, text_encoder = load_clip_text_encoder(text_encoder_path, text_encoder_local_path, torch_dtype=precision)
 
     precision = torch.float16 if encode_latents_in_fp16 else None
     # Make the autoencoder

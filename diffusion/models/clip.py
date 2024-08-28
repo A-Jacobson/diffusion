@@ -138,5 +138,5 @@ def load_clip_text_encoder(load_path: str,
         model = model.to(dtype=torch_dtype)
     
     tokenizer = model.tokenizer
-    text_encoder = model.model.transformer
+    text_encoder = model
     return text_encoder, tokenizer

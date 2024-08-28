@@ -1,7 +1,9 @@
 
 import torch
 from torch import nn
-from typing import Tuple
+from torch.nn import functional as F
+
+from typing import Tuple, Optional
 from composer import ComposerModel
 import open_clip
 import numpy as np
@@ -61,43 +63,59 @@ class CLIP(ComposerModel):
     def encode_text(self, text, normalize:bool=False):
         return self.model.encode_text(text, normalize=normalize)
 
-# class CLIPTextEncoder():
+def text_global_pool(x, text: Optional[torch.Tensor] = None, pool_type: str = 'argmax'):
+    if pool_type == 'first':
+        pooled, tokens = x[:, 0], x[:, 1:]
+    elif pool_type == 'last':
+        pooled, tokens = x[:, -1], x[:, :-1]
+    elif pool_type == 'argmax':
+        # take features from the eot embedding (eot_token is the highest number in each sequence)
+        assert text is not None
+        pooled, tokens = x[torch.arange(x.shape[0]), text.argmax(dim=-1)], x
+    else:
+        pooled = tokens = x
 
-#     def __init__(self, transformer):
+    return pooled, tokens
 
-#     def text_global_pool(x, text: Optional[torch.Tensor] = None, pool_type: str = 'argmax'):
-#         if pool_type == 'first':
-#             pooled, tokens = x[:, 0], x[:, 1:]
-#         elif pool_type == 'last':
-#             pooled, tokens = x[:, -1], x[:, :-1]
-#         elif pool_type == 'argmax':
-#             # take features from the eot embedding (eot_token is the highest number in each sequence)
-#             assert text is not None
-#             pooled, tokens = x[torch.arange(x.shape[0]), text.argmax(dim=-1)], x
-#         else:
-#             pooled = tokens = x
+def build_causal_mask():
+    # lazily create causal attention mask, with full attention between the tokens
+    # pytorch uses additive attention mask; fill with -inf
+    mask = torch.empty(77, 77)
+    mask.fill_(float("-inf"))
+    mask.triu_(1)  # zero out the lower diagonal
+    return mask
 
-#         return pooled, tokens
+class CustomCLIPTextEncoder(torch.nn.Module):
 
-#     def encode_text(self, text, normalize: bool = False):
-#         cast_dtype = self.transformer.get_cast_dtype()
+    def __init__(self, transformer, token_embedding, positional_embedding, ln_final, text_projection, pool_type: str ='argmax'):
+        super().__init__()
+        self.transformer = transformer
+        self.token_embedding = token_embedding
+        self.positional_embedding = positional_embedding
+        self.ln_final = ln_final
+        self.text_projection = text_projection
+        self.pool_type = pool_type
+        self.attention_mask = build_causal_mask()
 
-#         x = self.token_embedding(text).to(cast_dtype)  # [batch_size, n_ctx, d_model]
-
-#         x = x + self.positional_embedding.to(cast_dtype)
-#         x = x.permute(1, 0, 2)  # NLD -> LND
-#         x = self.transformer(x, attn_mask=self.attn_mask)
-#         x = x.permute(1, 0, 2)  # LND -> NLD
-#         x = self.ln_final(x)  # [batch_size, n_ctx, transformer.width]
-#         x, _ = text_global_pool(x, text, self.text_pool_type)
-#         if self.text_projection is not None:
-#             if isinstance(self.text_projection, nn.Linear):
-#                 x = self.text_projection(x)
-#             else:
-#                 x = x @ self.text_projection
-
-#         return F.normalize(x, dim=-1) if normalize else x
-
+    def __call__(self, input_ids, attention_mask, output_hidden_states=False, normalize: bool = True):
+        # re: attention_mask and output_hidden_states, the model is trained with a causal mask
+        # it doesnt make sense to change it after train time
+        # doesn't yet support hidden states.
+        cast_dtype = self.transformer.get_cast_dtype()
+        x = self.token_embedding(input_ids).to(cast_dtype)  # [batch_size, n_ctx, d_model]
+        x = x + self.positional_embedding.to(cast_dtype)
+        x = x.permute(1, 0, 2)  # NLD -> LND
+        x = self.transformer(x, attn_mask=self.attention_mask)
+        x = x.permute(1, 0, 2)  # LND -> NLD
+        x = self.ln_final(x)  # [batch_size, n_ctx, transformer.width]
+        pooled, last_hidden = text_global_pool(x, input_ids, self.pool_type)
+        if self.text_projection is not None:
+            if isinstance(self.text_projection, nn.Linear):
+                pooled = self.text_projection(pooled)
+            else:
+                pooled = pooled @ self.text_projection
+        pooled = F.normalize(pooled, dim=-1) if normalize else x
+        return last_hidden, pooled
 
 
 def load_clip_text_encoder(load_path: str,
@@ -122,21 +140,24 @@ def load_clip_text_encoder(load_path: str,
     with dist.local_rank_zero_download_and_wait(local_path):
         # Load the autoencoder weights from the state dict
         state_dict = torch.load(local_path, map_location='cpu')
+
+    config = {}
+    config['model_name'] = 'ViT-L-14'
+    # TODO make sure the config is saved during training + alter old checkpoints
     # Get the config from the state dict and init the model using it
-    config = state_dict['state']['model']['config']
+    # config = state_dict['state']['model']['config']
     model = CLIP(**config)
-    # Need to clean up the state dict to remove loss and metrics.
-    cleaned_state_dict = {}
-    for key in list(state_dict['state']['model'].keys()):
-        if key.split('.')[0] == 'model':
-            cleaned_key = '.'.join(key.split('.')[1:])
-            cleaned_state_dict[cleaned_key] = state_dict['state']['model'][key]
-    # Load the cleaned state dict into the model
-    model.load_state_dict(cleaned_state_dict, strict=True)
+    model.load_state_dict(state_dict['state']['model'], strict=True)
     
     if torch_dtype is not None:
         model = model.to(dtype=torch_dtype)
     
-    tokenizer = model.tokenizer
-    text_encoder = model
-    return text_encoder, tokenizer
+    # tokenizer = model.tokenizer # can use BPE tokenizer from HF/openai for ViTCLIP
+    # TODO will need to load other (sentencepiece) tokenizers from siglip in the future.
+    clip = model.model
+    text_encoder = CustomCLIPTextEncoder(clip.transformer, 
+                                         clip.token_embedding,
+                                         clip.positional_embedding,
+                                         clip.ln_final, 
+                                         clip.text_projection)
+    return text_encoder

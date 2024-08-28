@@ -77,10 +77,10 @@ def text_global_pool(x, text: Optional[torch.Tensor] = None, pool_type: str = 'a
 
     return pooled, tokens
 
-def build_causal_mask():
+def build_causal_mask(device):
     # lazily create causal attention mask, with full attention between the tokens
     # pytorch uses additive attention mask; fill with -inf
-    mask = torch.empty(77, 77)
+    mask = torch.empty(77, 77, device=device)
     mask.fill_(float("-inf"))
     mask.triu_(1)  # zero out the lower diagonal
     return mask
@@ -95,7 +95,10 @@ class CustomCLIPTextEncoder(torch.nn.Module):
         self.ln_final = ln_final
         self.text_projection = text_projection
         self.pool_type = pool_type
-        self.attention_mask = build_causal_mask()
+
+    @property
+    def device(self):
+        return next(self.parameters()).device
 
     def __call__(self, input_ids, attention_mask, output_hidden_states=False, normalize: bool = True):
         # re: attention_mask and output_hidden_states, the model is trained with a causal mask
@@ -105,7 +108,7 @@ class CustomCLIPTextEncoder(torch.nn.Module):
         x = self.token_embedding(input_ids).to(cast_dtype)  # [batch_size, n_ctx, d_model]
         x = x + self.positional_embedding.to(cast_dtype)
         x = x.permute(1, 0, 2)  # NLD -> LND
-        x = self.transformer(x, attn_mask=self.attention_mask)
+        x = self.transformer(x, attn_mask=build_causal_mask(x.device))
         x = x.permute(1, 0, 2)  # LND -> NLD
         x = self.ln_final(x)  # [batch_size, n_ctx, transformer.width]
         pooled, last_hidden = text_global_pool(x, input_ids, self.pool_type)

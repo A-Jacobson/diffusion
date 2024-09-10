@@ -11,7 +11,6 @@ install_requires = [
     'xformers==0.0.23.post1', 'triton==2.1.0', 'torchmetrics[image]==1.3.1', 'lpips==0.1.4', 'clean-fid==0.1.35',
     'clip@git+https://github.com/openai/CLIP.git@a1d071733d7111c9c014f024669f959182114e33', 'gradio==4.19.2',
     'datasets==2.19.2', 'open_clip_torch==2.24.0', 'peft==0.12.0'
-]
 
 extras_require = {}
 

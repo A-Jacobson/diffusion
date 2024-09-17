@@ -9,7 +9,7 @@ from typing import Optional, Tuple
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-
+from rope import RoPEAttention
 
 def modulate(x: torch.Tensor, shift: torch.Tensor, scale: torch.Tensor) -> torch.Tensor:
     """Modulate the input with the shift and scale."""
@@ -296,7 +296,7 @@ class MMDiTBlock(nn.Module):
         self.pre_attention_block_1 = PreAttentionBlock(self.num_features)
         self.pre_attention_block_2 = PreAttentionBlock(self.num_features)
         # Self-attention
-        self.attention = SelfAttention(self.num_features, self.num_heads)
+        self.attention = RoPEAttention(self.num_features, self.num_heads)
         # Post-attention blocks for two modalities
         self.post_attention_block_1 = PostAttentionBlock(self.num_features, self.expansion_factor)
         if not self.is_last:

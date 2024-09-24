@@ -9,7 +9,7 @@ from typing import Optional, Tuple
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from rope import RoPEAttention
+from diffusion.models.rope import RoPEAttention
 
 def modulate(x: torch.Tensor, shift: torch.Tensor, scale: torch.Tensor) -> torch.Tensor:
     """Modulate the input with the shift and scale."""

@@ -286,7 +286,10 @@ class MMDiTBlock(nn.Module):
         is_last (bool): Whether this is the last block in the network. Default: `False`.
     """
 
-    def __init__(self, num_features: int, num_heads: int, expansion_factor: int = 4, is_last: bool = False):
+    def __init__(self, num_features: int, num_heads: int, 
+                 expansion_factor: int = 4, 
+                 is_last: bool = False, 
+                 use_rope: bool = False):
         super().__init__()
         self.num_features = num_features
         self.num_heads = num_heads
@@ -296,7 +299,10 @@ class MMDiTBlock(nn.Module):
         self.pre_attention_block_1 = PreAttentionBlock(self.num_features)
         self.pre_attention_block_2 = PreAttentionBlock(self.num_features)
         # Self-attention
-        self.attention = RoPEAttention(self.num_features, self.num_heads)
+        if use_rope:
+            self.attention = RoPEAttention(self.num_features, self.num_heads)
+        else:
+            self.attention = SelfAttention(self.num_features, self.num_heads)
         # Post-attention blocks for two modalities
         self.post_attention_block_1 = PostAttentionBlock(self.num_features, self.expansion_factor)
         if not self.is_last:
@@ -354,7 +360,8 @@ class DiffusionTransformer(nn.Module):
                  conditioning_features: int = 1024,
                  conditioning_max_sequence_length: int = 77,
                  conditioning_dimension: int = 1,
-                 expansion_factor: int = 4):
+                 expansion_factor: int = 4,
+                 use_rope: bool = False):
         super().__init__()
         # Params for the network architecture
         self.num_features = num_features
@@ -387,12 +394,12 @@ class DiffusionTransformer(nn.Module):
         self.conditioning_position_embedding = torch.nn.Parameter(conditioning_position_embedding, requires_grad=True)
         # Transformer blocks
         self.transformer_blocks = nn.ModuleList([
-            MMDiTBlock(self.num_features, self.num_heads, expansion_factor=self.expansion_factor)
+            MMDiTBlock(self.num_features, self.num_heads, expansion_factor=self.expansion_factor, use_rope=use_rope)
             for _ in range(self.num_layers - 1)
         ])
         # Turn off post attn layers for conditioning sequence in final block
         self.transformer_blocks.append(
-            MMDiTBlock(self.num_features, self.num_heads, expansion_factor=self.expansion_factor, is_last=True))
+            MMDiTBlock(self.num_features, self.num_heads, expansion_factor=self.expansion_factor, is_last=True, use_rope=use_rope))
         # Output projection layer
         self.final_norm = AdaptiveLayerNorm(self.num_features)
         self.final_linear = nn.Linear(self.num_features, self.input_features)

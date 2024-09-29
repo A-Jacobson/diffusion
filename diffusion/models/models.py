@@ -600,6 +600,7 @@ def text_to_image_transformer(
     caption_key: str = 'captions',
     caption_mask_key: str = 'attention_mask',
     pretrained: bool = False,
+    use_rope: bool = False,
 ):
     """Text to image transformer training setup.
 
@@ -686,7 +687,8 @@ def text_to_image_transformer(
                                        conditioning_features=conditioning_features,
                                        conditioning_max_sequence_length=conditioning_max_sequence_length,
                                        conditioning_dimension=1,
-                                       expansion_factor=4)
+                                       expansion_factor=4,
+                                       use_rope=use_rope)
     # Make the composer model
     model = ComposerTextToImageMMDiT(model=transformer,
                                      autoencoder=vae,

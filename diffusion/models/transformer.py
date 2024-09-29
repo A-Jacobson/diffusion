@@ -315,8 +315,8 @@ class MMDiTBlock(nn.Module):
                 t: torch.Tensor,
                 mask: Optional[torch.Tensor] = None) -> Tuple[torch.Tensor, torch.Tensor]:
         # Pre-attention for the two modalities
-        q1, k1, v1 = self.pre_attention_block_1(x1, t)
-        q2, k2, v2 = self.pre_attention_block_2(x2, t)
+        q1, k1, v1 = self.pre_attention_block_1(x1, t) # image, maxlen 1024 default
+        q2, k2, v2 = self.pre_attention_block_2(x2, t) # conditioning_text, maxlen 77 default
         # Concat q, k, v along the sequence dimension
         if self.use_rope:
             v = self.attention(q=(q1, q1), k=(k1, k2), v=(v1, v2), mask=mask)

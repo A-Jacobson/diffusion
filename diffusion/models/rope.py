@@ -127,11 +127,15 @@ class Attention(nn.Module):
         return x
 
 
-class RoPEAttention(Attention):
+class RoPEAttention(nn.Module):
     """Multi-head Attention block with rotary position embeddings."""
-    def __init__(self, *args, rope_theta_2d=10.0, rope_theta_1d=10000.0, rope_mixed=True, **kwargs):
-        super().__init__(*args, **kwargs)
-        
+
+    def __init__(self, num_features: int, num_heads: int, 
+                 rope_theta_2d=10.0, rope_theta_1d=10000.0, 
+                 rope_mixed=True):
+        super().__init__()
+        self.num_features = num_features
+        self.num_heads = num_heads
         self.rope_mixed = rope_mixed        
         
         if self.rope_mixed:
@@ -143,7 +147,7 @@ class RoPEAttention(Attention):
             ).view(2, -1)
             self.freqs = nn.Parameter(freqs, requires_grad=True)
             
-            t_x, t_y = init_t_xy(end_x=14, end_y=14)
+            t_x, t_y = init_t_xy(end_x=14, end_y=14) # maxlen vision
             self.register_buffer('freqs_t_x', t_x)
             self.register_buffer('freqs_t_y', t_y)
         else:

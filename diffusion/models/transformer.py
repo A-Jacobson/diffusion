@@ -295,11 +295,12 @@ class MMDiTBlock(nn.Module):
         self.num_heads = num_heads
         self.expansion_factor = expansion_factor
         self.is_last = is_last
+        self.use_rope = use_rope
         # Pre-attention blocks for two modalities
         self.pre_attention_block_1 = PreAttentionBlock(self.num_features)
         self.pre_attention_block_2 = PreAttentionBlock(self.num_features)
         # Self-attention
-        if use_rope:
+        if self.use_rope:
             self.attention = RoPEAttention(self.num_features, self.num_heads)
         else:
             self.attention = SelfAttention(self.num_features, self.num_heads)
@@ -317,11 +318,14 @@ class MMDiTBlock(nn.Module):
         q1, k1, v1 = self.pre_attention_block_1(x1, t)
         q2, k2, v2 = self.pre_attention_block_2(x2, t)
         # Concat q, k, v along the sequence dimension
-        q = torch.cat([q1, q2], dim=1)
-        k = torch.cat([k1, k2], dim=1)
-        v = torch.cat([v1, v2], dim=1)
-        # Self-attention
-        v = self.attention(q, k, v, mask=mask)
+        if self.use_rope:
+            v = self.attention(q=(q1, q1), k=(k1, k2), v=(v1, v2), mask=mask)
+        else:
+            q = torch.cat([q1, q2], dim=1)
+            k = torch.cat([k1, k2], dim=1)
+            v = torch.cat([v1, v2], dim=1)
+            # Self-attention
+            v = self.attention(q, k, v, mask=mask)
         # Split the attention output back into the two modalities
         seq_len_1, seq_len_2 = x1.size(1), x2.size(1)
         y1, y2 = v.split([seq_len_1, seq_len_2], dim=1)

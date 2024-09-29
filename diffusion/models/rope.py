@@ -7,6 +7,8 @@ import torch
 import torch.nn as nn
 import math
 from functools import partial
+import torch.nn.functional as F
+
 
 def init_2d_freqs(dim: int, num_heads: int, theta: float = 10.0, rotate: bool = True):
     freqs_x = []
@@ -41,7 +43,6 @@ def compute_mixed_cis(freqs: torch.Tensor, t_x: torch.Tensor, t_y: torch.Tensor,
 def compute_axial_cis(dim: int, end_x: int, end_y: int, theta: float = 100.0):
     freqs_x = 1.0 / (theta ** (torch.arange(0, dim, 4)[: (dim // 4)].float() / dim))
     freqs_y = 1.0 / (theta ** (torch.arange(0, dim, 4)[: (dim // 4)].float() / dim))
-
     t_x, t_y = init_t_xy(end_x, end_y)
     freqs_x = torch.outer(t_x, freqs_x)
     freqs_y = torch.outer(t_y, freqs_y)
@@ -49,7 +50,7 @@ def compute_axial_cis(dim: int, end_x: int, end_y: int, theta: float = 100.0):
     freqs_cis_y = torch.polar(torch.ones_like(freqs_y), freqs_y)
     return torch.cat([freqs_cis_x, freqs_cis_y], dim=-1)
 
-def reshape_for_broadcast(freqs_cis: torch.Tensor, x: torch.Tensor):
+def reshape_for_broadcast_2d(freqs_cis: torch.Tensor, x: torch.Tensor):
     ndim = x.ndim
     assert 0 <= 1 < ndim
     if freqs_cis.shape == (x.shape[-2], x.shape[-1]):
@@ -58,10 +59,39 @@ def reshape_for_broadcast(freqs_cis: torch.Tensor, x: torch.Tensor):
         shape = [d if i >= ndim-3 else 1 for i, d in enumerate(x.shape)]
     return freqs_cis.view(*shape)
 
-def apply_rotary_emb(xq: torch.Tensor, xk: torch.Tensor, freqs_cis: torch.Tensor):
+
+def apply_rotary_emb_2d(xq: torch.Tensor, xk: torch.Tensor, freqs_cis: torch.Tensor):
     xq_ = torch.view_as_complex(xq.float().reshape(*xq.shape[:-1], -1, 2))
     xk_ = torch.view_as_complex(xk.float().reshape(*xk.shape[:-1], -1, 2))
-    freqs_cis = reshape_for_broadcast(freqs_cis, xq_)
+    freqs_cis = reshape_for_broadcast_1d(freqs_cis, xq_)
+    xq_out = torch.view_as_real(xq_ * freqs_cis).flatten(3)
+    xk_out = torch.view_as_real(xk_ * freqs_cis).flatten(3)
+    return xq_out.type_as(xq).to(xq.device), xk_out.type_as(xk).to(xk.device)
+
+
+def precompute_freqs_cis_1d(dim: int, end: int, theta: float = 10000.0):
+    freqs = 1.0 / (theta ** (torch.arange(0, dim, 2)[: (dim // 2)].float() / dim))
+    t = torch.arange(end, device=freqs.device, dtype=torch.float32)  # type: ignore
+    freqs = torch.outer(t, freqs)  # type: ignore
+    freqs_cis = torch.polar(torch.ones_like(freqs), freqs)  # complex64
+    return freqs_cis
+
+
+def reshape_for_broadcast_1d(freqs_cis: torch.Tensor, x: torch.Tensor):
+    ndim = x.ndim
+    assert 0 <= 1 < ndim
+    assert freqs_cis.shape == (x.shape[1], x.shape[-1])
+    shape = [d if i == 1 or i == ndim - 1 else 1 for i, d in enumerate(x.shape)]
+    return freqs_cis.view(*shape)
+
+
+def apply_rotary_emb_1d(
+    xq: torch.Tensor,
+    xk: torch.Tensor,
+    freqs_cis: torch.Tensor):
+    xq_ = torch.view_as_complex(xq.float().reshape(*xq.shape[:-1], -1, 2))
+    xk_ = torch.view_as_complex(xk.float().reshape(*xk.shape[:-1], -1, 2))
+    freqs_cis = reshape_for_broadcast_1d(freqs_cis, xq_)
     xq_out = torch.view_as_real(xq_ * freqs_cis).flatten(3)
     xk_out = torch.view_as_real(xk_ * freqs_cis).flatten(3)
     return xq_out.type_as(xq).to(xq.device), xk_out.type_as(xk).to(xk.device)
@@ -75,7 +105,7 @@ class Attention(nn.Module):
         head_dim = dim // num_heads
         self.scale = qk_scale or head_dim ** -0.5
 
-        self.qkv = nn.Linear(dim, dim * 3, bias=qkv_bias)
+        # self.qkv = nn.Linear(dim, dim * 3, bias=qkv_bias)
         self.attn_drop = nn.Dropout(attn_drop)
         self.proj = nn.Linear(dim, dim)
         self.proj_drop = nn.Dropout(proj_drop)
@@ -99,7 +129,7 @@ class Attention(nn.Module):
 
 class RoPEAttention(Attention):
     """Multi-head Attention block with rotary position embeddings."""
-    def __init__(self, *args, rope_theta=10.0, rope_mixed=True, **kwargs):
+    def __init__(self, *args, rope_theta_2d=10.0, rope_theta_1d=10000.0, rope_mixed=True, **kwargs):
         super().__init__(*args, **kwargs)
         
         self.rope_mixed = rope_mixed        
@@ -108,7 +138,7 @@ class RoPEAttention(Attention):
             self.compute_cis = partial(compute_mixed_cis, num_heads=self.num_heads)
             
             freqs = init_2d_freqs(
-                dim=self.dim // self.num_heads, num_heads=self.num_heads, theta=rope_theta, 
+                dim=self.dim // self.num_heads, num_heads=self.num_heads, theta=rope_theta_2d, 
                 rotate=True
             ).view(2, -1)
             self.freqs = nn.Parameter(freqs, requires_grad=True)
@@ -117,38 +147,50 @@ class RoPEAttention(Attention):
             self.register_buffer('freqs_t_x', t_x)
             self.register_buffer('freqs_t_y', t_y)
         else:
-            self.compute_cis = partial(compute_axial_cis, dim=self.dim // self.num_heads, theta=rope_theta)
+            self.compute_cis = partial(compute_axial_cis, dim=self.dim // self.num_heads, theta=rope_theta_2d)
             freqs_cis = self.compute_cis(end_x=14, end_y=14)
             self.freqs_cis = freqs_cis
     
-    def forward(self, x):
-        B, N, C = x.shape
-        qkv = self.qkv(x).reshape(B, N, 3, self.num_heads, C // self.num_heads).permute(2, 0, 3, 1, 4)
-        q, k, v = qkv[0], qkv[1], qkv[2]
-
-        ###### Apply rotary position embedding
-        w = h = math.sqrt(x.shape[1] - 1)
+    def forward(self, q:tuple, k:tuple, v:tuple, mask=None):
+        q_text, q_image = q
+        k_text, k_image = k
+        v_text, v_image = v # batch, time, C
+        B, N_2D, C = v_image.shape
+        B, N_1D, C = v_text.shape
+        device = q_image.device
+        
+        ###### Apply 2d rotary position embedding
+        w = h = math.sqrt(N_2D - 1)
         if self.rope_mixed:
             t_x, t_y = self.freqs_t_x, self.freqs_t_y
-            if self.freqs_t_x.shape[0] != x.shape[1] - 1:
+            if self.freqs_t_x.shape[0] != N_2D - 1:
                 t_x, t_y = init_t_xy(end_x=w, end_y=h)
-                t_x, t_y = t_x.to(x.device), t_y.to(x.device)
+                t_x, t_y = t_x.to(device), t_y.to(device)
             freqs_cis = self.compute_cis(self.freqs, t_x, t_y)
         else:
             freqs_cis = self.freqs_cis
-            if self.freqs_cis.shape[0] != x.shape[1] - 1:
+            if self.freqs_cis.shape[0] != N_2D - 1:
                 freqs_cis = self.compute_cis(end_x=w, end_y=h)
-            freqs_cis = freqs_cis.to(x.device)
+            freqs_cis = freqs_cis.to(device)
         
-        q[:, :, 1:], k[:, :, 1:] = apply_rotary_emb(q[:, :, 1:], k[:, :, 1:], freqs_cis=freqs_cis)        
+        q_image[:, :, 1:], k_image[:, :, 1:] = apply_rotary_emb_2d(q_image[:, :, 1:], k_image[:, :, 1:], freqs_cis=freqs_cis)        
         #########
+        # apply 1d rotary position embedding
+        # TODO double check these frequency parameters
+        freqs_cis_1d = precompute_freqs_cis_1d(dim=self.dim // self.num_heads, end=N_1D)
+        q_text[:, :, 1:], k_text[:, :, 1:] = apply_rotary_emb_1d(q_text[:, :, 1:], k_text[:, :, 1:], freqs_cis=freqs_cis_1d) 
         
-        attn = (q * self.scale) @ k.transpose(-2, -1)
-        attn = attn.softmax(dim=-1)
-        attn = self.attn_drop(attn)
-
-        x = (attn @ v).transpose(1, 2).reshape(B, N, C)
-        x = self.proj(x)
-        x = self.proj_drop(x)
-        
-        return x
+        # recombine each modality
+        q = torch.cat([q_text, q_image], dim=1)
+        k = torch.cat([k_text, k_image], dim=1)
+        v = torch.cat([v_text, v_image], dim=1)
+        B, T, C = v.size()
+        # Reshape the query, key, and values for multi-head attention
+        q = q.view(B, T, self.num_heads, C // self.num_heads).transpose(1, 2)
+        k = k.view(B, T, self.num_heads, C // self.num_heads).transpose(1, 2)
+        v = v.view(B, T, self.num_heads, C // self.num_heads).transpose(1, 2)
+        # Native torch attention
+        attention_out = F.scaled_dot_product_attention(q, k, v, attn_mask=mask)  # (B, H, T, C/H)
+        # Swap the sequence length and the head dimension back and get rid of num_heads.
+        attention_out = attention_out.transpose(1, 2).contiguous().view(B, T, C)  # (B, T, C)
+        return attention_out
